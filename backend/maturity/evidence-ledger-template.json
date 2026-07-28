@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "records": [],
+  "record_fields": ["task_id", "release_id", "corpus_revision", "model_revision", "index_revision", "window_start", "window_end", "owner", "evidence_uri", "decision", "expires_at"]
+}

@@ -1,0 +1,44 @@
+schema: docvault.alert-catalog.v1
+owner: platform-oncall
+notification_paths:
+  critical: [pager, security-oncall]
+  high: [pager, platform-oncall]
+  medium: [ticket, team-chat]
+  low: [ticket]
+alerts:
+  - id: API_ERROR_BUDGET
+    severity: critical
+    owner: platform-oncall
+    condition: "5xx_rate > approved_budget for 5m"
+    notify: critical
+    runbook: docs/runbooks/operations-release.md#api-and-provider-incident
+  - id: AUTHORIZATION_LEAKAGE
+    severity: critical
+    owner: security-oncall
+    condition: "unauthorized_result_count > 0"
+    notify: critical
+    runbook: docs/runbooks/operations-release.md#security-incident
+  - id: INGESTION_DEAD_LETTERS
+    severity: high
+    owner: backend-oncall
+    condition: "dead_letter_jobs > 0 or retry_age_seconds > threshold"
+    notify: high
+    runbook: docs/runbooks/operations-release.md#ingestion-and-reconciliation
+  - id: STORAGE_RETRIEVAL_DRIFT
+    severity: high
+    owner: backend-oncall
+    condition: "unexplained_reconciliation_drift > 0"
+    notify: high
+    runbook: docs/runbooks/operations-release.md#ingestion-and-reconciliation
+  - id: QUERY_IMAGE_RETENTION
+    severity: critical
+    owner: security-oncall
+    condition: "query_image_cleanup_failure > 0 or egress_denial_breach > 0"
+    notify: critical
+    runbook: docs/runbooks/operations-release.md#security-incident
+  - id: DISK_HEADROOM
+    severity: high
+    owner: platform-oncall
+    condition: "free_disk_below_rollback_headroom"
+    notify: high
+    runbook: docs/runbooks/operations-release.md#capacity-and-saturation

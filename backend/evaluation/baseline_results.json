@@ -1,0 +1,7 @@
+[
+  {"case_id":"text-en-001","retrieved_document_ids":[101],"citations":[{"document_id":101,"version_id":1,"page":1}],"claims":[{"supported":true}]},
+  {"case_id":"text-hi-001","retrieved_document_ids":[102],"citations":[{"document_id":102,"version_id":1,"page":2}],"claims":[{"supported":true}]},
+  {"case_id":"mixed-001","retrieved_document_ids":[103],"citations":[{"document_id":103,"version_id":2,"page":1}],"claims":[{"supported":true}]},
+  {"case_id":"no-answer-001","retrieved_document_ids":[],"citations":[],"claims":[]},
+  {"case_id":"acl-001","retrieved_document_ids":[],"citations":[],"claims":[]}
+]

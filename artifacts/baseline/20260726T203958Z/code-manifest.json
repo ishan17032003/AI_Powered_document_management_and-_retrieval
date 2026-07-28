@@ -1,0 +1,337 @@
+[
+  {
+    "path": "PROJECT_GUIDE.md",
+    "sha256": "4f535f3b0bb0360a84648ce376042be20d596dce511470f090fda6670bcb25f4",
+    "size": 14899
+  },
+  {
+    "path": "README.md",
+    "sha256": "f97a99e29aeced1075c545ccf47ab07058cfd0717d141734c0f498a9ca6227b6",
+    "size": 6314
+  },
+  {
+    "path": "backend/Dockerfile",
+    "sha256": "755fbb9909ef3db82fadd5fedab3cfb91754ab0fc2cb17228a6bd2718b6868c0",
+    "size": 4170
+  },
+  {
+    "path": "backend/app/__init__.py",
+    "sha256": "d0d37971c509e0e2948828f2d7c740c66a67a566c9531855752a02dbdec8e06e",
+    "size": 62
+  },
+  {
+    "path": "backend/app/audit.py",
+    "sha256": "f409059ec8a93317462fda25be333eaec90e7d0aaa4bc5c9e0233b2ed23a6ea8",
+    "size": 738
+  },
+  {
+    "path": "backend/app/classify.py",
+    "sha256": "4d9989938f01697fb1cc0906a7bb74cefffdc52bf269935ae358ff0d4e2e0a99",
+    "size": 173
+  },
+  {
+    "path": "backend/app/config.py",
+    "sha256": "2054c9790947839bf3cd4a498417a741346454f5d8e6b9faed3d89db648930e7",
+    "size": 3483
+  },
+  {
+    "path": "backend/app/database.py",
+    "sha256": "d450de932d94f1ad5dd6bfc9181b6c7f79651abc35c429301aaa0cb6c3a3cf84",
+    "size": 1962
+  },
+  {
+    "path": "backend/app/dedup.py",
+    "sha256": "2efce375564b0ff2df687334c88bb716a59d27b194f2ad1bc28e2bc091596831",
+    "size": 994
+  },
+  {
+    "path": "backend/app/deps.py",
+    "sha256": "43cb86b150cec5d1d8ceebbd8a96f210bfc10195561c6379babae369617fd6db",
+    "size": 1906
+  },
+  {
+    "path": "backend/app/main.py",
+    "sha256": "bd6bad37d46d91bf711c3c926f7cda2e76ca447342f85561fe4625d3c7c8d0ce",
+    "size": 2258
+  },
+  {
+    "path": "backend/app/models.py",
+    "sha256": "833d3d4a530808aee44d5b0879befe1a5f87e4dadd7cc8a07d674fc7304e8a13",
+    "size": 8845
+  },
+  {
+    "path": "backend/app/ocr.py",
+    "sha256": "54d686770a50e3024fbb45086fdbf06a6972e3f7d2ea18d033726a2dfacdff00",
+    "size": 414
+  },
+  {
+    "path": "backend/app/okf.py",
+    "sha256": "f450d4954f09c54e1b40fec3e75df98b08894b1aae63d9d71a1f92c143ad61ea",
+    "size": 371
+  },
+  {
+    "path": "backend/app/rag.py",
+    "sha256": "1cb786fcd9f334488902320c9f620104b82e9ea91cd3eceb4b1dd103fb81b6a3",
+    "size": 204
+  },
+  {
+    "path": "backend/app/rbac.py",
+    "sha256": "ed555c5c1991a8ada5d2f17a98fcbfa320939fa2346312f36fd9efdb36881121",
+    "size": 497
+  },
+  {
+    "path": "backend/app/repositories/__init__.py",
+    "sha256": "dbdfa121b2d6b46e91d28a30f7818805ff6d319ae7c05b305e22cb412a81fcbd",
+    "size": 188
+  },
+  {
+    "path": "backend/app/repositories/admin_repository.py",
+    "sha256": "f88eb78cb8d778e1a03bdf1806f5d1128c68cd50686a23dae6b78dbb64bc63a8",
+    "size": 1308
+  },
+  {
+    "path": "backend/app/repositories/audit_repository.py",
+    "sha256": "36b2705b8784dfc557088bd55860f94639f5834bf421c128387f59d094962c50",
+    "size": 796
+  },
+  {
+    "path": "backend/app/repositories/document_repository.py",
+    "sha256": "0d4381401d32e50006c163e6b87f4ff057fffca6e06c851ece50d67f2a71f7f3",
+    "size": 2220
+  },
+  {
+    "path": "backend/app/repositories/duplicate_repository.py",
+    "sha256": "8c60bebd9be6ec270bcadf3ce6294e3784e2f051ad79acd6a0bca141417b7aa3",
+    "size": 3796
+  },
+  {
+    "path": "backend/app/repositories/okf_repository.py",
+    "sha256": "81ed03e2502cf6f92dc93fa9d6ec260c4cbab8d033fad54198bd7e3a2db5477e",
+    "size": 1319
+  },
+  {
+    "path": "backend/app/repositories/rag_repository.py",
+    "sha256": "a22722fab05fdc06dc2cdc6af521197266bee89dafc16d682a105190c8857ec6",
+    "size": 553
+  },
+  {
+    "path": "backend/app/repositories/rbac_repository.py",
+    "sha256": "35aa8546e58ae90331a0921f62905e7727c936dcb1c48c3fcff49af7f3b33bbf",
+    "size": 1236
+  },
+  {
+    "path": "backend/app/repositories/search_repository.py",
+    "sha256": "133483c283074afd4a735d3e7f645cd30539946a4f17aeaf0ebb683a8a1552a2",
+    "size": 7789
+  },
+  {
+    "path": "backend/app/repositories/user_repository.py",
+    "sha256": "62c92faab73325def596d79c2bae1fcf43b74e0c004cf86cd9af5fc1d571fd28",
+    "size": 439
+  },
+  {
+    "path": "backend/app/routers/__init__.py",
+    "sha256": "1f54ad6d81835514ba83e264dd451fd7b89b033d4af0851adbb35f3cc91a36b0",
+    "size": 19
+  },
+  {
+    "path": "backend/app/routers/admin.py",
+    "sha256": "01a5cb41bb7c4d34ef96c9679aa47ffb5ab8f4719e8cd47a4988a307b42636f9",
+    "size": 909
+  },
+  {
+    "path": "backend/app/routers/audit.py",
+    "sha256": "a270b98f3b06375219ab300ebe96d573f07d1d5b6728f5f4bc412944bafd9d51",
+    "size": 847
+  },
+  {
+    "path": "backend/app/routers/auth.py",
+    "sha256": "c7bb626b379fb1bd319273537dfbcd8cdfea3a6259b9eb5146606e1da8cebf4f",
+    "size": 992
+  },
+  {
+    "path": "backend/app/routers/documents.py",
+    "sha256": "d2b386536e887077f680dfa3caafd9b09da8c13800aad46d5fbb23000fd3a41c",
+    "size": 3109
+  },
+  {
+    "path": "backend/app/routers/duplicates.py",
+    "sha256": "d0d6b01f417a49ebf9dcd9b926d928dccdd9150a257624f1c716e4118d424132",
+    "size": 1154
+  },
+  {
+    "path": "backend/app/routers/search.py",
+    "sha256": "061860caaa40e91223e6f9ac517d8a8cedebf08f99b33f9d3b454d022ae6e303",
+    "size": 4215
+  },
+  {
+    "path": "backend/app/schemas.py",
+    "sha256": "542cb3b4861986ddb49fd645d1f9885c17f65b5a6e8eb2f7e37b68336af3dc71",
+    "size": 5450
+  },
+  {
+    "path": "backend/app/search.py",
+    "sha256": "ccf3bcf0e3810ae6e7c199c4a2e651eb2245e8ee19424e2a3de6f868d5156259",
+    "size": 551
+  },
+  {
+    "path": "backend/app/security.py",
+    "sha256": "0dd20a50768ac91ea618f563dc77627e7ca1fd23c53922a3fcf4357161ba6b2b",
+    "size": 322
+  },
+  {
+    "path": "backend/app/seed.py",
+    "sha256": "8a090ce8f37171b94625dc0a87ca6bff73d71c37270a2816ebacba843ce00a38",
+    "size": 3723
+  },
+  {
+    "path": "backend/app/services/__init__.py",
+    "sha256": "9ec2a309caea3bf649eb3a427b831b8ead3db894d0cbf0ff8968809d49380f6e",
+    "size": 170
+  },
+  {
+    "path": "backend/app/services/admin_service.py",
+    "sha256": "9c0e26851c8903cc269ef7ae81a1cdaeb6f291779d8ebc3dcb659920fdce88a9",
+    "size": 1026
+  },
+  {
+    "path": "backend/app/services/audit_service.py",
+    "sha256": "6ab39622497acbacb9392c1dc2e89d70b73fb434415b33a072a6d10e5da2652a",
+    "size": 1488
+  },
+  {
+    "path": "backend/app/services/auth_service.py",
+    "sha256": "fc8d5a3cd0dd23c7616e62de78403b6339dc1f3fdfda192ef7d586e3feeea9ff",
+    "size": 1634
+  },
+  {
+    "path": "backend/app/services/document_service.py",
+    "sha256": "c5149d894c066c6520e0bd2bd0adac538b7ad8c24ee3eb8fbd3dfeb5aa3490e8",
+    "size": 13283
+  },
+  {
+    "path": "backend/app/services/duplicate_service.py",
+    "sha256": "ad640a56e9daa6a55d05f62db0ede2d9482eacd19a81165e6a99f5c91fb86241",
+    "size": 4911
+  },
+  {
+    "path": "backend/app/services/exceptions.py",
+    "sha256": "07367c1d9fd42ad788662a229db762e404566732e59a93cd2ccc4cac39f866e5",
+    "size": 648
+  },
+  {
+    "path": "backend/app/services/extraction_service.py",
+    "sha256": "ad8723f5f44b8e6051f08722af037cab313520d8dada4a2a244ea5e9478381bb",
+    "size": 13729
+  },
+  {
+    "path": "backend/app/services/okf_service.py",
+    "sha256": "91f1aba79f4e1897af076c08633d369b495d0b97429ef2430b3a0b9de52f594e",
+    "size": 4815
+  },
+  {
+    "path": "backend/app/services/rag_service.py",
+    "sha256": "681d7a87ef68db7d229860a484343bddf0ea1368606ecef132f7bc36eb0e37de",
+    "size": 18269
+  },
+  {
+    "path": "backend/app/services/rbac_service.py",
+    "sha256": "04c7529a4b2102531b07d108b4dfb7e730a97462562d30ecedd966b0f0fc26d4",
+    "size": 2536
+  },
+  {
+    "path": "backend/app/services/search_application_service.py",
+    "sha256": "5e7583a987fcb4c0d3271dfe413741ba79311c983c939ff3c4686613e63d9f5e",
+    "size": 2997
+  },
+  {
+    "path": "backend/app/services/search_service.py",
+    "sha256": "840ee395589d28b085ef3991e96883956520bf82b6acfc8c65b207d36df347c1",
+    "size": 10713
+  },
+  {
+    "path": "backend/app/utils/__init__.py",
+    "sha256": "fb1a3b6378f0c6903a1a4266a32b1042188056c8e72ec49b89d344802ab0bf69",
+    "size": 77
+  },
+  {
+    "path": "backend/app/utils/classification.py",
+    "sha256": "c8c6983be31ae19f9040708754c1d8a6d9727ee174e64b4b7a877ad2f6a44f81",
+    "size": 1654
+  },
+  {
+    "path": "backend/app/utils/file_storage.py",
+    "sha256": "0df773d3a71feaea8389ec2cee0d5f28ab90f7b8d7339a0e3ab408c483f46160",
+    "size": 1155
+  },
+  {
+    "path": "backend/app/utils/hashing.py",
+    "sha256": "7371e27a6f574bb7fc5f3156b848212781e1af11f4eeecf34be3c337fe83b36f",
+    "size": 447
+  },
+  {
+    "path": "backend/app/utils/okf_helpers.py",
+    "sha256": "b39cbabbc779588a0aeb06dfc5a6de9ae6b195f7028cbc37c5a34bb2ca35116c",
+    "size": 2030
+  },
+  {
+    "path": "backend/app/utils/rag_helpers.py",
+    "sha256": "3795af886cac04e6099091b8ad8b3377baca063927ba53dc0c5774578be9aa2c",
+    "size": 3264
+  },
+  {
+    "path": "backend/app/utils/rag_types.py",
+    "sha256": "015105f427653e901d7c9353dfa49d70be6a0fb520aafa393b850e94c0d587db",
+    "size": 550
+  },
+  {
+    "path": "backend/app/utils/request_context.py",
+    "sha256": "b58e0a87139c9135323249070da999aa08d715291bd3ce4c897ed3aeec63c665",
+    "size": 534
+  },
+  {
+    "path": "backend/app/utils/search_helpers.py",
+    "sha256": "da27f7ab41dc100ceb801a3bc26f58ff07fcb2b828dbb3de5767e8e6e0aecbb7",
+    "size": 2118
+  },
+  {
+    "path": "backend/app/utils/security.py",
+    "sha256": "7d6d3b58036ac299fcaef2f6a4abd0aa9ad453b73813dcc817bc184593fe251c",
+    "size": 1089
+  },
+  {
+    "path": "backend/entrypoint.sh",
+    "sha256": "20f6dc874b82e294b1e4775edb9ae987255302fb61627af217c09fdb96405c3c",
+    "size": 5423
+  },
+  {
+    "path": "backend/requirements.txt",
+    "sha256": "a89133e25a15e420dcd743c9c3a84d0edc5f06064f2ecc73aefdbaba43263be7",
+    "size": 1999
+  },
+  {
+    "path": "backend/start.sh",
+    "sha256": "5349b0977432fda91890c250d13d6f7144e19a63472ec1aef5d6ac12d825ec55",
+    "size": 455
+  },
+  {
+    "path": "backend/tests/__init__.py",
+    "sha256": "eb1c050f315b1e3406095e48fc3b0ac98b6d8309855008ed4e24341eb2d7ba7d",
+    "size": 21
+  },
+  {
+    "path": "backend/tests/test_layer_boundaries.py",
+    "sha256": "c3cc29c59c45a952498f566231fdd5d7c7d0b1a2d03a583bb4b0a3c3c1b0e51e",
+    "size": 4262
+  },
+  {
+    "path": "docker-compose.dev.yml",
+    "sha256": "d4a035d4e692179b9a16258a4284e027de612b4338006ffc550315602d5ef497",
+    "size": 3388
+  },
+  {
+    "path": "docker-compose.yml",
+    "sha256": "3febe4c9541bcb0fe54fa9cbaa0cad136484ad13192ff96fc9cc1fc385b97ea9",
+    "size": 6824
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "schema": "docvault.visual-model-bom.v1",
+  "manifest_version": "visual-bom-20260727",
+  "status": "pending_model_approval",
+  "generated_at": "2026-07-27T00:00:00Z",
+  "release_policy": {
+    "immutable": true,
+    "remote_code": false,
+    "external_egress": false,
+    "training_on_user_data": false
+  },
+  "models": [],
+  "pending_candidates": [
+    {
+      "name": "SigLIP 2 candidate",
+      "lane": "image",
+      "source": "official upstream repository; exact URL/revision required before download",
+      "revision": "pending",
+      "artifact_sha256": "pending",
+      "license": "pending security review",
+      "preprocessing": "pending corpus bake-off",
+      "runtime": "local offline worker only"
+    },
+    {
+      "name": "ColPali-family candidate",
+      "lane": "page",
+      "source": "official upstream repository; exact URL/revision required before download",
+      "revision": "pending",
+      "artifact_sha256": "pending",
+      "license": "pending security review",
+      "preprocessing": "pending corpus bake-off",
+      "runtime": "local offline worker only"
+    }
+  ]
+}

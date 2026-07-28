@@ -1,0 +1,14 @@
+{
+  "schema": "docvault.maturity.quarterly-score-review.v1",
+  "quarter": "YYYY-QN",
+  "profile": "single-host|distributed",
+  "evidence_window": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
+  "domains": [],
+  "blockers": [],
+  "expired_evidence": [],
+  "corrective_actions": [],
+  "decision": "eligible|capped|ineligible",
+  "next_eligibility_date": "YYYY-MM-DD",
+  "owner_signatures": [],
+  "evidence_ledger_export_sha256": ""
+}

@@ -1,0 +1,224 @@
+name: Backend Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  PYTHONDONTWRITEBYTECODE: "1"
+  UV_NO_PROGRESS: "1"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_LINUX_X64_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  TRIVY_VERSION: "0.70.0"
+  TRIVY_LINUX_64BIT_SHA256: "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9"
+
+jobs:
+  secrets:
+    name: Backend secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install checksum-pinned Gitleaks
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          bin_dir="$RUNNER_TEMP/security-bin"
+          mkdir -p "$bin_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          actual_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "$actual_sha256" != "$GITLEAKS_LINUX_X64_SHA256" ]]; then
+            echo "Gitleaks archive checksum mismatch" >&2
+            exit 1
+          fi
+          tar -xzf "$archive" -C "$bin_dir" gitleaks
+          "$bin_dir/gitleaks" version
+
+      - name: Scan backend source and deployment files for secrets
+        run: |
+          report="$RUNNER_TEMP/gitleaks.json"
+          set +e
+          "$RUNNER_TEMP/security-bin/gitleaks" dir . \
+            --config .gitleaks.toml \
+            --exit-code 10 \
+            --max-target-megabytes 10 \
+            --no-banner \
+            --no-color \
+            --redact=100 \
+            --report-format json \
+            --report-path "$report" \
+            --timeout 60
+          scanner_status=$?
+          set -e
+          if [[ "$scanner_status" -ne 0 && "$scanner_status" -ne 10 ]]; then
+            echo "Gitleaks execution failed with status $scanner_status" >&2
+            exit "$scanner_status"
+          fi
+          if [[ ! -s "$report" ]]; then
+            echo "Gitleaks did not produce a JSON report" >&2
+            exit 1
+          fi
+          python3 backend/scripts/check_security_acceptances.py \
+            --scanner gitleaks \
+            --report "$report" \
+            --acceptances backend/security/scan-acceptances.json
+
+  dependency:
+    name: Backend dependency scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Python and uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          cache-dependency-glob: backend/uv.lock
+          enable-cache: true
+          python-version: "3.12"
+          version: "0.11.9"
+          working-directory: backend
+
+      - name: Install frozen security environment
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Audit hash-locked production dependencies
+        working-directory: backend
+        run: |
+          report="$RUNNER_TEMP/pip-audit.json"
+          set +e
+          uv run --frozen pip-audit \
+            --require-hashes \
+            --disable-pip \
+            --progress-spinner off \
+            --desc off \
+            --aliases on \
+            --requirement requirements.txt \
+            --format json \
+            --output "$report"
+          scanner_status=$?
+          set -e
+          if [[ "$scanner_status" -ne 0 && ! -s "$report" ]]; then
+            echo "pip-audit failed before producing a JSON report" >&2
+            exit "$scanner_status"
+          fi
+          uv run --frozen python -m scripts.check_security_acceptances \
+            --scanner pip-audit \
+            --report "$report" \
+            --acceptances security/scan-acceptances.json
+
+  sast:
+    name: Backend SAST
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Python and uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          cache-dependency-glob: backend/uv.lock
+          enable-cache: true
+          python-version: "3.12"
+          version: "0.11.9"
+          working-directory: backend
+
+      - name: Install frozen security environment
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Scan Python code for medium and higher findings
+        working-directory: backend
+        run: |
+          report="$RUNNER_TEMP/bandit.json"
+          uv run --frozen bandit \
+            --recursive app scripts \
+            --severity-level medium \
+            --confidence-level medium \
+            --format json \
+            --output "$report" \
+            --exit-zero
+          uv run --frozen python -m scripts.check_security_acceptances \
+            --scanner bandit \
+            --report "$report" \
+            --acceptances security/scan-acceptances.json
+
+  container:
+    name: Backend container scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install checksum-pinned Trivy
+        run: |
+          archive="$RUNNER_TEMP/trivy.tar.gz"
+          bin_dir="$RUNNER_TEMP/security-bin"
+          mkdir -p "$bin_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          actual_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "$actual_sha256" != "$TRIVY_LINUX_64BIT_SHA256" ]]; then
+            echo "Trivy archive checksum mismatch" >&2
+            exit 1
+          fi
+          tar -xzf "$archive" -C "$bin_dir" trivy
+          "$bin_dir/trivy" --version
+
+      - name: Build the complete production-capability image
+        run: |
+          image="docvault-backend:security-${GITHUB_SHA}"
+          docker build --pull --tag "$image" backend
+          echo "DOCVAULT_SECURITY_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Scan image packages, files, and image configuration
+        run: |
+          report="$RUNNER_TEMP/trivy.json"
+          "$RUNNER_TEMP/security-bin/trivy" image \
+            --cache-dir "$RUNNER_TEMP/trivy-cache" \
+            --disable-telemetry \
+            --exit-code 0 \
+            --format json \
+            --image-config-scanners misconfig,secret \
+            --no-progress \
+            --output "$report" \
+            --scanners vuln,secret \
+            --severity HIGH,CRITICAL \
+            --skip-version-check \
+            --timeout 15m \
+            "$DOCVAULT_SECURITY_IMAGE"
+          python3 backend/scripts/check_security_acceptances.py \
+            --scanner trivy \
+            --report "$report" \
+            --acceptances backend/security/scan-acceptances.json

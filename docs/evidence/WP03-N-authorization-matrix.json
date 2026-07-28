@@ -1,0 +1,14 @@
+{
+  "matrix_version": "AUTHZ-010-v1",
+  "decision_source": "D-06 local identity and permission-level ACL policy",
+  "cases": [
+    {"principal": "USER", "role_capability": "VIEW", "rule": "ALLOW", "scope": "DOC", "expected": "ALLOW"},
+    {"principal": "USER", "role_capability": "VIEW", "rule": "DENY", "scope": "DOC", "expected": "DENY"},
+    {"principal": "GROUP", "role_capability": "VIEW", "rule": "ALLOW", "scope": "FOLDER_INHERITED", "expected": "ALLOW"},
+    {"principal": "GROUP", "role_capability": "VIEW", "rule": "ALLOW_EXPIRED", "scope": "FOLDER_INHERITED", "expected": "DENY"},
+    {"principal": "USER", "role_capability": "CREATE", "rule": "NONE", "scope": "DOC", "expected": "DENY"},
+    {"principal": "USER", "role_capability": "VIEW", "rule": "ALLOW", "scope": "OTHER_USER_DOC", "expected": "DENY"},
+    {"principal": "USER", "role_capability": "VIEW", "rule": "ALLOW", "scope": "MOVED_OUTSIDE_ANCESTRY", "expected": "DENY"},
+    {"principal": "SUSPENDED_USER", "role_capability": "VIEW", "rule": "ALLOW", "scope": "DOC", "expected": "DENY"}
+  ]
+}

@@ -1,0 +1,54 @@
+═══════════════════════════════════════════════════
+ XENIUS DocVault — backend starting
+═══════════════════════════════════════════════════
+  DATABASE : sqlite:////data/docvault.db
+  STORAGE  : /data/storage
+  OKF DIR  : /data/okf_bundle
+═══════════════════════════════════════════════════
+[entrypoint] Running database seed...
+Seed complete.
+Demo users:
+  admin        / admin123   (Super Admin)
+  contributor  / contrib123 (Contributor)
+  viewer       / viewer123  (Viewer)
+  auditor      / auditor123 (Auditor)
+[entrypoint] Seed OK.
+[entrypoint] Starting Gunicorn with 2 uvicorn worker(s)...
+127.0.0.1:33892 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:58748 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:35086 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:54180 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:44762 - "GET /api/v1/admin/stats HTTP/1.1" 200
+172.22.0.4:44772 - "GET /api/v1/auth/me HTTP/1.1" 200
+172.22.0.4:44778 - "GET /api/v1/admin/stats HTTP/1.1" 200
+127.0.0.1:46106 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:37020 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:37026 - "GET /api/v1/documents HTTP/1.1" 200
+172.22.0.4:58274 - "GET /api/v1/duplicates HTTP/1.1" 200
+172.22.0.4:58276 - "GET /api/v1/audit?limit=200 HTTP/1.1" 200
+172.22.0.4:58292 - "GET /api/v1/admin/stats HTTP/1.1" 200
+127.0.0.1:42538 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:35168 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:35174 - "GET /api/v1/status HTTP/1.1" 200
+127.0.0.1:51778 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:38592 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:49190 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:40918 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:50264 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:34568 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:49060 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:50990 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:46280 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:58406 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:36424 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:34084 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:37114 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:42290 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:49304 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.1:37112 - "HEAD /api/v1/status HTTP/1.1" 405
+172.22.0.1:37112 - "GET /api/v1/status HTTP/1.1" 200
+172.22.0.4:37354 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:44646 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:35722 - "GET /api/v1/health HTTP/1.1" 200
+127.0.0.1:53962 - "GET /api/v1/health HTTP/1.1" 200
+172.22.0.4:35958 - "GET /api/v1/health HTTP/1.1" 200

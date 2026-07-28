@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "release_id": "REPLACE-WITH-CI-RELEASE-ID",
+  "status": "NO-GO-UNTIL-FILLED",
+  "created_at": "REPLACE-WITH-UTC-TIMESTAMP",
+  "source_revision": "REPLACE-WITH-GIT-SHA",
+  "images": {
+    "backend": "REQUIRED: registry/name@sha256:<64-hex>",
+    "frontend": "REQUIRED: registry/name@sha256:<64-hex>",
+    "base_images": ["REQUIRED: python:3.12-slim@sha256:<64-hex>", "REQUIRED: node:20-alpine@sha256:<64-hex>", "REQUIRED: nginx:1.27-alpine@sha256:<64-hex>"]
+  },
+  "models": {
+    "embedding": {"name": "BAAI/bge-m3", "revision": "REQUIRED", "sha256": "REQUIRED"},
+    "reranker": {"name": "BAAI/bge-reranker-v2-m3", "revision": "REQUIRED", "sha256": "REQUIRED"},
+    "generation": {"provider": "none", "name": "none", "revision": "none", "sha256": "none"}
+  },
+  "configuration": {"environment": "production", "secret_source": "external secret manager at /run/secrets/docvault_secret_key", "tls_termination": "REQUIRED", "egress_policy": "deny-by-default; exact provider host allowlist", "cors_origins": "REQUIRED: HTTPS origins only"},
+  "verification": {"migration_head": "REQUIRED", "backup_restore_evidence": "REQUIRED", "security_scan_bundle": "REQUIRED", "penetration_test_report": "REQUIRED", "approvals": {"platform": "PENDING", "backend": "PENDING", "security": "PENDING"}}
+}

@@ -1,0 +1,67 @@
+{
+  "captured_at": "2026-07-26T20:40:11.495437+00:00",
+  "database": "artifacts/baseline/20260726T203958Z/backup/database/docvault.db",
+  "document_status_counts": {
+    "READY": 44
+  },
+  "foreign_key_violations": [],
+  "integrity_check": [
+    "ok"
+  ],
+  "ocr_status_counts": {
+    "native": 35,
+    "ocr": 8,
+    "skipped": 1
+  },
+  "pragma": {
+    "application_id": 0,
+    "freelist_count": 4,
+    "journal_mode": "wal",
+    "page_count": 244,
+    "user_version": 0
+  },
+  "public_table_counts": {
+    "assignments": 4,
+    "audit_log": 291,
+    "cabinets": 1,
+    "doc_classes": 5,
+    "doc_fts": 41,
+    "doc_metadata": 0,
+    "doc_versions": 44,
+    "documents": 44,
+    "dup_groups": 7,
+    "dup_members": 14,
+    "folders": 1,
+    "permissions": 15,
+    "role_permissions": 57,
+    "roles": 8,
+    "users": 4
+  },
+  "quick_check": [
+    "ok"
+  ],
+  "schema_sha256": "23e5611a9638820069cc6c71bc8d0964d366cdbab775faa88c8ca242d2769a42",
+  "sqlite_library_version": "3.45.3",
+  "table_counts": {
+    "assignments": 4,
+    "audit_log": 291,
+    "cabinets": 1,
+    "doc_classes": 5,
+    "doc_fts": 41,
+    "doc_fts_config": 1,
+    "doc_fts_content": 41,
+    "doc_fts_data": 40,
+    "doc_fts_docsize": 41,
+    "doc_fts_idx": 38,
+    "doc_metadata": 0,
+    "doc_versions": 44,
+    "documents": 44,
+    "dup_groups": 7,
+    "dup_members": 14,
+    "folders": 1,
+    "permissions": 15,
+    "role_permissions": 57,
+    "roles": 8,
+    "users": 4
+  }
+}

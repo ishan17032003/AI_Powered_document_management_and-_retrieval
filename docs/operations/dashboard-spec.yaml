@@ -1,0 +1,23 @@
+schema: docvault.dashboard-spec.v1
+dashboards:
+  - id: api
+    panels: [request_rate, p50_p95_p99_latency, 4xx_5xx, saturation, dependency_errors]
+    alerts: [API_ERROR_BUDGET]
+  - id: ingestion
+    panels: [jobs_by_state, stage_latency, retry_age, dead_letters, review_rate]
+    alerts: [INGESTION_DEAD_LETTERS]
+  - id: retrieval
+    panels: [lane_requests, lane_latency, shadow_overlap, reranker_failures, acl_rejections]
+    alerts: [AUTHORIZATION_LEAKAGE]
+  - id: integrity
+    panels: [missing_objects, checksum_mismatch, stale_index, stale_acl_projection]
+    alerts: [STORAGE_RETRIEVAL_DRIFT]
+  - id: security
+    panels: [login_throttles, denied_egress, query_image_cleanup, feedback_categories]
+    alerts: [AUTHORIZATION_LEAKAGE, QUERY_IMAGE_RETENTION]
+  - id: recovery
+    panels: [backup_age, restore_verification, migration_head, rollback_manifest]
+    alerts: [DISK_HEADROOM]
+redaction:
+  forbidden_dimensions: [query_text, document_id, asset_id, filename, object_key, user_email, prompt, image_bytes]
+  allowed_dimensions: [lane, outcome, model_revision, index_revision, policy_revision]

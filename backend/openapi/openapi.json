@@ -1,0 +1,5338 @@
+{
+  "components": {
+    "schemas": {
+      "AccessRuleCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "effect": {
+            "enum": [
+              "ALLOW",
+              "DENY"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "inherits": {
+            "default": false,
+            "title": "Inherits",
+            "type": "boolean"
+          },
+          "permission": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Permission",
+            "type": "string"
+          },
+          "principal_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Principal Id",
+            "type": "integer"
+          },
+          "principal_type": {
+            "enum": [
+              "USER",
+              "GROUP"
+            ],
+            "title": "Principal Type",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "principal_type",
+          "principal_id",
+          "permission",
+          "effect"
+        ],
+        "title": "AccessRuleCreate",
+        "type": "object"
+      },
+      "AccessRuleOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "integer"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "inherits": {
+            "title": "Inherits",
+            "type": "boolean"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "integer"
+          },
+          "principal_type": {
+            "title": "Principal Type",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "principal_type",
+          "principal_id",
+          "permission",
+          "scope_type",
+          "scope_id",
+          "effect",
+          "inherits",
+          "is_active",
+          "expires_at",
+          "reason",
+          "created_by",
+          "created_at"
+        ],
+        "title": "AccessRuleOut",
+        "type": "object"
+      },
+      "AdminCredentialReset": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 16,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "AdminCredentialReset",
+        "type": "object"
+      },
+      "AdminRoleAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "AdminRoleAssignment",
+        "type": "object"
+      },
+      "AdminUserCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 16,
+            "title": "Password",
+            "type": "string"
+          },
+          "role": {
+            "default": "Viewer",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 80,
+            "minLength": 3,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "name",
+          "email",
+          "password"
+        ],
+        "title": "AdminUserCreate",
+        "type": "object"
+      },
+      "AdminUserPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "suspended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "AdminUserPatch",
+        "type": "object"
+      },
+      "AskQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "question": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskQuery",
+        "type": "object"
+      },
+      "AskResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "needs_clarification": {
+            "default": false,
+            "title": "Needs Clarification",
+            "type": "boolean"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "scoped_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoped Document Id"
+          }
+        },
+        "required": [
+          "question",
+          "answer",
+          "mode"
+        ],
+        "title": "AskResponse",
+        "type": "object"
+      },
+      "AuditOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_name": {
+            "title": "Actor Name",
+            "type": "string"
+          },
+          "details": {
+            "title": "Details",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "object_id": {
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "title": "Object Type",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actor_name",
+          "action",
+          "object_type",
+          "object_id",
+          "ip",
+          "timestamp",
+          "details"
+        ],
+        "title": "AuditOut",
+        "type": "object"
+      },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AuditPage",
+        "type": "object"
+      },
+      "Body_image_search_api_v1_search_image_post": {
+        "properties": {
+          "image": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_image_search_api_v1_search_image_post",
+        "type": "object"
+      },
+      "Body_login_api_v1_auth_login_post": {
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          },
+          "grant_type": {
+            "anyOf": [
+              {
+                "pattern": "^password$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "password": {
+            "format": "password",
+            "title": "Password",
+            "type": "string"
+          },
+          "scope": {
+            "default": "",
+            "title": "Scope",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_api_v1_auth_login_post",
+        "type": "object"
+      },
+      "Body_upload_document_api_v1_documents_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_api_v1_documents_post",
+        "type": "object"
+      },
+      "Body_upload_document_version_api_v1_documents__doc_id__versions_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_version_api_v1_documents__doc_id__versions_post",
+        "type": "object"
+      },
+      "Body_visual_image_search_api_v1_search_visual_image_post": {
+        "properties": {
+          "image": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_visual_image_search_api_v1_search_visual_image_post",
+        "type": "object"
+      },
+      "Candidate": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title"
+        ],
+        "title": "Candidate",
+        "type": "object"
+      },
+      "Citation": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "document_id",
+          "title"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "DocumentDetail": {
+        "properties": {
+          "class_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Confidence"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_duplicate_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Duplicate Of"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "metadata": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataOut"
+            },
+            "title": "Metadata",
+            "type": "array"
+          },
+          "ocr_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Confidence"
+          },
+          "ocr_status": {
+            "title": "Ocr Status",
+            "type": "string"
+          },
+          "ocr_text": {
+            "default": "",
+            "title": "Ocr Text",
+            "type": "string"
+          },
+          "page_count": {
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/VersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "folder_id",
+          "status",
+          "ocr_status",
+          "page_count",
+          "created_at",
+          "updated_at",
+          "content_hash",
+          "language"
+        ],
+        "title": "DocumentDetail",
+        "type": "object"
+      },
+      "DocumentMetadataUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_updated_at": {
+            "format": "date-time",
+            "title": "Expected Updated At",
+            "type": "string"
+          },
+          "metadata": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataUpdate"
+            },
+            "maxItems": 100,
+            "title": "Metadata",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_updated_at",
+          "metadata"
+        ],
+        "title": "DocumentMetadataUpdate",
+        "type": "object"
+      },
+      "DocumentPage": {
+        "description": "Bounded cursor page for clients that need stable document traversal.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DocumentPage",
+        "type": "object"
+      },
+      "DocumentSummary": {
+        "properties": {
+          "class_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Confidence"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ocr_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Confidence"
+          },
+          "ocr_status": {
+            "title": "Ocr Status",
+            "type": "string"
+          },
+          "page_count": {
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "folder_id",
+          "status",
+          "ocr_status",
+          "page_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentSummary",
+        "type": "object"
+      },
+      "DupGroupOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/DupMemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "primary_document_id": {
+            "title": "Primary Document Id",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "similarity_type": {
+            "title": "Similarity Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "similarity_type",
+          "primary_document_id",
+          "resolved",
+          "members"
+        ],
+        "title": "DupGroupOut",
+        "type": "object"
+      },
+      "DupMemberOut": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "similarity_score": {
+            "title": "Similarity Score",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "similarity_score"
+        ],
+        "title": "DupMemberOut",
+        "type": "object"
+      },
+      "DuplicatePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DupGroupOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DuplicatePage",
+        "type": "object"
+      },
+      "EffectiveAccessOut": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "ancestry": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Ancestry",
+            "type": "array"
+          },
+          "matched_rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectiveAccessRule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "permission",
+          "scope_type",
+          "scope_id",
+          "allowed",
+          "reason_code",
+          "policy_version",
+          "ancestry"
+        ],
+        "title": "EffectiveAccessOut",
+        "type": "object"
+      },
+      "EffectiveAccessRule": {
+        "properties": {
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "inherits": {
+            "title": "Inherits",
+            "type": "boolean"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "integer"
+          },
+          "principal_type": {
+            "title": "Principal Type",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "principal_type",
+          "principal_id",
+          "effect",
+          "inherits",
+          "reason",
+          "scope_type",
+          "scope_id"
+        ],
+        "title": "EffectiveAccessRule",
+        "type": "object"
+      },
+      "ExtractionProvenanceOut": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "extractor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extractor Name"
+          },
+          "extractor_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extractor Version"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "ocr_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Engine"
+          },
+          "ocr_engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Engine Version"
+          },
+          "ocr_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ocr Languages",
+            "type": "array"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "quality_signals": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Quality Signals",
+            "type": "object"
+          }
+        },
+        "title": "ExtractionProvenanceOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImportItem": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "status"
+        ],
+        "title": "ImportItem",
+        "type": "object"
+      },
+      "ImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "folder_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "path": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "recursive": {
+            "default": true,
+            "title": "Recursive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "ImportRequest",
+        "type": "object"
+      },
+      "ImportResult": {
+        "properties": {
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "imported",
+          "duplicates",
+          "skipped",
+          "errors"
+        ],
+        "title": "ImportResult",
+        "type": "object"
+      },
+      "IngestionStatusOut": {
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "cancellable": {
+            "title": "Cancellable",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "degraded_stages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded Stages",
+            "type": "array"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Status"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "stage_results": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Stage Results",
+            "type": "object"
+          },
+          "stage_version": {
+            "title": "Stage Version",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "stage",
+          "stage_version",
+          "attempt_count",
+          "retryable",
+          "cancellable",
+          "terminal",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "IngestionStatusOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "degraded_stages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded Stages",
+            "type": "array"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "stage": {
+            "default": "EXTRACT",
+            "title": "Stage",
+            "type": "string"
+          },
+          "stage_results": {
+            "additionalProperties": true,
+            "title": "Stage Results",
+            "type": "object"
+          },
+          "stage_version": {
+            "title": "Stage Version",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "stage_version",
+          "idempotency_key",
+          "attempt_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "JobPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "JobPage",
+        "type": "object"
+      },
+      "MetadataOut": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "MetadataOut",
+        "type": "object"
+      },
+      "MetadataUpdate": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "MetadataUpdate",
+        "type": "object"
+      },
+      "MoveDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_updated_at": {
+            "format": "date-time",
+            "title": "Expected Updated At",
+            "type": "string"
+          },
+          "folder_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Folder Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "folder_id",
+          "expected_updated_at"
+        ],
+        "title": "MoveDocument",
+        "type": "object"
+      },
+      "OkfEntryCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "content"
+        ],
+        "title": "OkfEntryCreate",
+        "type": "object"
+      },
+      "ResolveDup": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "keep_primary",
+            "enum": [
+              "keep_primary",
+              "keep_both"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "primary_document_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Primary Document Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "primary_document_id"
+        ],
+        "title": "ResolveDup",
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "match_ranges": {
+            "items": {
+              "$ref": "#/components/schemas/SearchMatchRange"
+            },
+            "title": "Match Ranges",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "snippet",
+          "score"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchMatchRange": {
+        "description": "Half-open character range in the returned plain-text snippet.",
+        "properties": {
+          "end": {
+            "exclusiveMinimum": 0.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SearchMatchRange",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "mode",
+          "count",
+          "hits"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SemanticQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "q": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "SemanticQuery",
+        "type": "object"
+      },
+      "Token": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "Token",
+        "type": "object"
+      },
+      "UploadResult": {
+        "properties": {
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "ocr_status": {
+            "title": "Ocr Status",
+            "type": "string"
+          },
+          "pipeline": {
+            "additionalProperties": true,
+            "title": "Pipeline",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "folder_id",
+          "ocr_status",
+          "pipeline"
+        ],
+        "title": "UploadResult",
+        "type": "object"
+      },
+      "UserAdminOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "name",
+          "email",
+          "status"
+        ],
+        "title": "UserAdminOut",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "name",
+          "email",
+          "status"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      },
+      "UserPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserAdminOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "UserPage",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionOut": {
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "version_no": {
+            "title": "Version No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_no",
+          "filename",
+          "content_type",
+          "size",
+          "checksum",
+          "created_at"
+        ],
+        "title": "VersionOut",
+        "type": "object"
+      },
+      "VisualFeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "relevant",
+              "irrelevant",
+              "unauthorized",
+              "unsafe",
+              "wrong_type"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "result_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "category"
+        ],
+        "title": "VisualFeedbackRequest",
+        "type": "object"
+      },
+      "VisualSearchHit": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "integer"
+          },
+          "asset_type": {
+            "enum": [
+              "PAGE",
+              "IMAGE",
+              "REGION",
+              "THUMBNAIL"
+            ],
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "matched_lanes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Lanes",
+            "type": "array"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "preview_available": {
+            "default": true,
+            "title": "Preview Available",
+            "type": "boolean"
+          },
+          "result_type": {
+            "enum": [
+              "page",
+              "image"
+            ],
+            "title": "Result Type",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_id",
+          "document_id",
+          "version_id",
+          "title",
+          "asset_type",
+          "result_type",
+          "content_type",
+          "snippet",
+          "score"
+        ],
+        "title": "VisualSearchHit",
+        "type": "object"
+      },
+      "VisualSearchQuery": {
+        "additionalProperties": false,
+        "description": "Bounded text-to-visual query contract.",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "text_to_image",
+            "enum": [
+              "text_to_image",
+              "text_to_page",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "q": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "VisualSearchQuery",
+        "type": "object"
+      },
+      "VisualSearchResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/VisualSearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "text_to_image",
+              "text_to_page",
+              "image_to_image",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "mode",
+          "count",
+          "hits",
+          "provider"
+        ],
+        "title": "VisualSearchResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/auth/login"
+          }
+        },
+        "type": "oauth2"
+      }
+    }
+  },
+  "info": {
+    "description": "AI-based Digital Document Management System — local vertical slice.",
+    "title": "XENIUS DocVault API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/access/effective": {
+      "get": {
+        "operationId": "explain_effective_access_api_v1_access_effective_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "permission",
+            "required": false,
+            "schema": {
+              "default": "VIEW",
+              "title": "Permission",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "DOC",
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveAccessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Explain Effective Access",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/v1/access/rules/{rule_id}": {
+      "delete": {
+        "operationId": "revoke_access_rule_api_v1_access_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Rule Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke Access Rule",
+        "tags": [
+          "access"
+        ]
+      },
+      "patch": {
+        "operationId": "update_access_rule_api_v1_access_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Rule Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Access Rule",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/v1/access/{scope}/rules": {
+      "post": {
+        "operationId": "grant_global_access_rule_api_v1_access__scope__rules_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "title": "Scope",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Grant Global Access Rule",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/v1/access/{scope}/{scope_id}/rules": {
+      "get": {
+        "operationId": "list_access_rules_api_v1_access__scope___scope_id__rules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Scope Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRuleOut"
+                  },
+                  "title": "Response List Access Rules Api V1 Access  Scope   Scope Id  Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Access Rules",
+        "tags": [
+          "access"
+        ]
+      },
+      "post": {
+        "operationId": "grant_access_rule_api_v1_access__scope___scope_id__rules_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Scope Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Grant Access Rule",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/v1/admin/documents/{document_id}/reprocess": {
+      "post": {
+        "operationId": "reprocess_document_api_v1_admin_documents__document_id__reprocess_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reprocess Document",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/jobs/cursor": {
+      "get": {
+        "operationId": "list_jobs_cursor_api_v1_admin_jobs_cursor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Jobs Cursor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/rbac-matrix": {
+      "get": {
+        "operationId": "rbac_matrix_api_v1_admin_rbac_matrix_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Rbac Matrix",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/reconciliation/metrics": {
+      "get": {
+        "description": "Read-only drift and stale-processing metrics for operators/alerting.",
+        "operationId": "reconciliation_metrics_api_v1_admin_reconciliation_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "stale_after_seconds",
+            "required": false,
+            "schema": {
+              "default": 3600,
+              "maximum": 604800,
+              "minimum": 1,
+              "title": "Stale After Seconds",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reconciliation Metrics",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/release-metrics": {
+      "get": {
+        "description": "Read-only release-critical queue, drift, and optional health metrics.",
+        "operationId": "release_metrics_api_v1_admin_release_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "stale_after_seconds",
+            "required": false,
+            "schema": {
+              "default": 3600,
+              "maximum": 604800,
+              "minimum": 1,
+              "title": "Stale After Seconds",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Release Metrics",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "operationId": "dashboard_stats_api_v1_admin_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Dashboard Stats",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "list_users_api_v1_admin_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserAdminOut"
+                  },
+                  "title": "Response List Users Api V1 Admin Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Users",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "create_user_api_v1_admin_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAdminOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/cursor": {
+      "get": {
+        "operationId": "list_users_cursor_api_v1_admin_users_cursor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Users Cursor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}": {
+      "patch": {
+        "operationId": "update_user_api_v1_admin_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAdminOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/reset-credential": {
+      "post": {
+        "operationId": "reset_credential_api_v1_admin_users__user_id__reset_credential_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCredentialReset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAdminOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reset Credential",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/revoke-sessions": {
+      "post": {
+        "operationId": "revoke_user_sessions_api_v1_admin_users__user_id__revoke_sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke User Sessions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/role": {
+      "post": {
+        "operationId": "assign_role_api_v1_admin_users__user_id__role_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRoleAssignment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAdminOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Assign Role",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/audit": {
+      "get": {
+        "operationId": "list_audit_api_v1_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 60,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "object_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Object Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditOut"
+                  },
+                  "title": "Response List Audit Api V1 Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Audit",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/v1/audit/cursor": {
+      "get": {
+        "operationId": "list_audit_cursor_api_v1_audit_cursor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 60,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "object_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Object Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Audit Cursor",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/documents": {
+      "get": {
+        "operationId": "list_documents_api_v1_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  },
+                  "title": "Response List Documents Api V1 Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Documents",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "operationId": "upload_document_api_v1_documents_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_api_v1_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upload Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/cursor": {
+      "get": {
+        "operationId": "list_documents_cursor_api_v1_documents_cursor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Documents Cursor",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/import-folder": {
+      "post": {
+        "operationId": "import_folder_api_v1_documents_import_folder_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Import Folder",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}": {
+      "delete": {
+        "operationId": "delete_document_api_v1_documents__doc_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "get": {
+        "operationId": "get_document_api_v1_documents__doc_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/content": {
+      "get": {
+        "operationId": "download_document_api_v1_documents__doc_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Download Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/metadata": {
+      "patch": {
+        "operationId": "update_document_metadata_api_v1_documents__doc_id__metadata_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentMetadataUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Document Metadata",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/move": {
+      "post": {
+        "operationId": "move_document_api_v1_documents__doc_id__move_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Move Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/versions": {
+      "get": {
+        "operationId": "list_document_versions_api_v1_documents__doc_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VersionOut"
+                  },
+                  "title": "Response List Document Versions Api V1 Documents  Doc Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Document Versions",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "operationId": "upload_document_version_api_v1_documents__doc_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_version_api_v1_documents__doc_id__versions_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upload Document Version",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/versions/{version_id}/content": {
+      "get": {
+        "operationId": "download_document_version_api_v1_documents__doc_id__versions__version_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Download Document Version",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/duplicates": {
+      "get": {
+        "operationId": "list_duplicate_groups_api_v1_duplicates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DupGroupOut"
+                  },
+                  "title": "Response List Duplicate Groups Api V1 Duplicates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Duplicate Groups",
+        "tags": [
+          "duplicates"
+        ]
+      }
+    },
+    "/api/v1/duplicates/cursor": {
+      "get": {
+        "operationId": "list_duplicate_groups_cursor_api_v1_duplicates_cursor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Duplicate Groups Cursor",
+        "tags": [
+          "duplicates"
+        ]
+      }
+    },
+    "/api/v1/duplicates/{group_id}/resolve": {
+      "post": {
+        "operationId": "resolve_group_api_v1_duplicates__group_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DupGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Resolve Group",
+        "tags": [
+          "duplicates"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "deprecated": true,
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Api V1 Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/ingestions/{job_id}": {
+      "get": {
+        "operationId": "get_ingestion_status_api_v1_ingestions__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Ingestion Status",
+        "tags": [
+          "ingestions"
+        ]
+      }
+    },
+    "/api/v1/ingestions/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_ingestion_api_v1_ingestions__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Ingestion",
+        "tags": [
+          "ingestions"
+        ]
+      }
+    },
+    "/api/v1/ingestions/{job_id}/retry": {
+      "post": {
+        "operationId": "retry_ingestion_api_v1_ingestions__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Retry Ingestion",
+        "tags": [
+          "ingestions"
+        ]
+      }
+    },
+    "/api/v1/live": {
+      "get": {
+        "operationId": "live_api_v1_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Api V1 Live Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "operationId": "ready_api_v1_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ready Api V1 Ready Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "description": "A required dependency is unavailable"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "operationId": "keyword_search_api_v1_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Keyword Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/ask": {
+      "post": {
+        "description": "Ask a natural-language question; get a grounded answer with citations (RAG).\n\nRetrieval is security-trimmed to what the user may VIEW, so the AI answer\nnever draws on documents the user cannot access.",
+        "operationId": "ask_api_v1_search_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Ask",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/image": {
+      "post": {
+        "description": "Process an image query ephemerally; visual indexes remain opt-in.",
+        "operationId": "image_search_api_v1_search_image_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_image_search_api_v1_search_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Image Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/okf/entries": {
+      "get": {
+        "description": "List all OKF bundle entries (title, category, tags).",
+        "operationId": "list_okf_entries_api_v1_search_okf_entries_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Okf Entries",
+        "tags": [
+          "search",
+          "okf"
+        ]
+      },
+      "post": {
+        "description": "Add or replace a Markdown entry in the OKF bundle.\n\nThe file must include YAML frontmatter with at minimum a `title` field.\nOn success the bundle is reloaded from disk.",
+        "operationId": "create_okf_entry_api_v1_search_okf_entries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OkfEntryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Okf Entry",
+        "tags": [
+          "search",
+          "okf"
+        ]
+      }
+    },
+    "/api/v1/search/okf/reload": {
+      "post": {
+        "description": "Force-reload the OKF bundle from disk (useful after manual edits).",
+        "operationId": "reload_okf_bundle_api_v1_search_okf_reload_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reload Okf Bundle",
+        "tags": [
+          "search",
+          "okf"
+        ]
+      }
+    },
+    "/api/v1/search/okf/status": {
+      "get": {
+        "description": "Return the status of the Open Knowledge Format bundle.",
+        "operationId": "okf_status_api_v1_search_okf_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Okf Status",
+        "tags": [
+          "search",
+          "okf"
+        ]
+      }
+    },
+    "/api/v1/search/semantic": {
+      "post": {
+        "description": "Natural-language search.\n\nWhen transformer embeddings are enabled it would vector-search; in this\nlocal slice it falls back to the FTS keyword index while preserving the\nsame request/response contract (mode reported honestly).",
+        "operationId": "semantic_search_api_v1_search_semantic_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Semantic Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/visual": {
+      "post": {
+        "description": "Search authorized image assets or rendered visual document pages by text.",
+        "operationId": "visual_search_api_v1_search_visual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualSearchQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Visual Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/visual-assets/{asset_id}/preview": {
+      "get": {
+        "description": "Stream a derivative only after fresh SQL document authorization.",
+        "operationId": "visual_asset_preview_api_v1_search_visual_assets__asset_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Visual Asset Preview",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/visual-feedback": {
+      "post": {
+        "description": "Accept bounded feedback without storing result content or notes.",
+        "operationId": "visual_feedback_api_v1_search_visual_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Visual Feedback",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/visual/image": {
+      "post": {
+        "description": "Search semantically similar authorized visual assets/pages.\n\nThe uploaded query image is validated, normalized, embedded in memory, and\ndiscarded.  It is never inserted into a visual asset or vector table.",
+        "operationId": "visual_image_search_api_v1_search_visual_image_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "image_to_image",
+              "enum": [
+                "image_to_image",
+                "hybrid"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_visual_image_search_api_v1_search_visual_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Visual Image Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "detailed_status_api_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detailed Status Api V1 Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Detailed Status",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

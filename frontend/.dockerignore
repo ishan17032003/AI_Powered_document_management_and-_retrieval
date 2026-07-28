@@ -1,0 +1,19 @@
+# frontend/.dockerignore
+# Exclude files that shouldn't be in the build context.
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output (produced inside the container)
+dist/
+.vite/
+
+# Dev/IDE
+.env
+.env.local
+.DS_Store
+.idea/
+.vscode/
+
+# Nginx config is COPY'd explicitly; no other config needed

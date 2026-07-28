@@ -1,0 +1,78 @@
+{
+  "blocking_finding_counts": {
+    "checksum_mismatches": 0,
+    "current_hash_mismatches": 0,
+    "documents_without_versions": 0,
+    "fts_content_mismatches": 0,
+    "fts_duplicate_documents": 0,
+    "fts_extra_documents": 0,
+    "fts_missing_documents": 3,
+    "fts_title_mismatches": 0,
+    "invalid_file_keys": 0,
+    "missing_files": 3,
+    "orphan_files": 4,
+    "size_mismatches": 0,
+    "vector_state_unavailable": 1
+  },
+  "captured_at": "2026-07-26T20:40:11.188022+00:00",
+  "database": "backend/docvault.db",
+  "database_to_storage": {
+    "checksum_mismatches": [],
+    "current_hash_mismatches": [],
+    "documents_without_versions": [],
+    "duplicate_file_keys": [],
+    "invalid_file_keys": [],
+    "missing_files": [
+      {
+        "document_id": 17,
+        "file_key": "5e/61b66f982e184e9b9069fc668af676a2.pdf",
+        "version_id": 17
+      },
+      {
+        "document_id": 19,
+        "file_key": "74/f08866bdc0134a47855b62b70d15a336.txt",
+        "version_id": 19
+      },
+      {
+        "document_id": 22,
+        "file_key": "bf/a8052a442c844f99be2188cc0ac02475.pdf",
+        "version_id": 22
+      }
+    ],
+    "orphan_files": [
+      "29/4775ed5ac51745acad75dc3390a41163.pdf",
+      "29/e6ed15d4140549f9b523a54653dd59a9.pdf",
+      "53/7a9c79b863814d0497d747955ad44e7b.pdf",
+      "bf/7233bfa2ce434633a58d1f6d2a3d2282.pdf"
+    ],
+    "size_mismatches": []
+  },
+  "fts": {
+    "content_mismatch_document_ids": [],
+    "duplicate_document_ids": {},
+    "extra_document_ids": [],
+    "invalid_document_ids": [],
+    "missing_document_ids": [
+      17,
+      19,
+      22
+    ],
+    "title_mismatch_document_ids": []
+  },
+  "storage": "backend/storage",
+  "summary": {
+    "clean": false,
+    "documents": 44,
+    "fts_document_ids": 41,
+    "referenced_file_keys": 44,
+    "stored_bytes": 62262728,
+    "stored_files": 45,
+    "versions": 44
+  },
+  "vector": {
+    "assessed": false,
+    "configured_in_source": true,
+    "explanation": "No DocVault/Qdrant container was running and no Docker volume named for DocVault or DDMS was present at snapshot time. Vector writes are best-effort in the current code, so derived vector coverage cannot be proven and must be rebuilt/reconciled before release.",
+    "status": "no_persistent_docvault_vector_store_found"
+  }
+}

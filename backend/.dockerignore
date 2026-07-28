@@ -1,0 +1,35 @@
+# backend/.dockerignore
+# Exclude files that shouldn't be in the build context.
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+.venv*/
+venv/
+env/
+
+# Local data — always volume-mounted at runtime, never baked into the image
+storage/
+.runtime/
+docvault.db
+docvault.db-shm
+docvault.db-wal
+*.sqlite3
+
+# Dev/IDE
+.env
+.env.local
+.idea/
+.vscode/
+.DS_Store
+
+# Docs / tests
+*.md
+tests/
+docs/
+artifacts/

@@ -1,0 +1,23 @@
+schema: docvault.deployment-controls.v1
+controls:
+  secrets:
+    source: managed-secret-manager
+    allowed_mounts: [/run/secrets/docvault_secret_key]
+    log_values: false
+    rotation: required
+  transport:
+    public_tls: required
+    plaintext_public_http: false
+    internal_http: loopback-or-private-only
+  egress:
+    default: deny
+    allowlist: exact-hosts-only
+    credentials_in_url: false
+  filesystem:
+    root_read_only: true
+    writable_paths: [/tmp, /var/lib/docvault/storage, /var/lib/docvault/runtime]
+    source_tree_writable: false
+    symlink_escape: denied
+  identity:
+    run_as_non_root: true
+    extra_capabilities: []

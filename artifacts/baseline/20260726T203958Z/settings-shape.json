@@ -1,0 +1,164 @@
+{
+  "captured_at": "2026-07-26T20:40:04.454053+00:00",
+  "environment_prefix": "DOCVAULT_",
+  "fields": [
+    {
+      "annotation": "str",
+      "default_expression": "'XENIUS DocVault'",
+      "environment_variable": "DOCVAULT_APP_NAME",
+      "name": "app_name"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "<redacted>",
+      "environment_variable": "DOCVAULT_SECRET_KEY",
+      "name": "secret_key"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'HS256'",
+      "environment_variable": "DOCVAULT_ALGORITHM",
+      "name": "algorithm"
+    },
+    {
+      "annotation": "int",
+      "default_expression": "<redacted>",
+      "environment_variable": "DOCVAULT_ACCESS_TOKEN_MINUTES",
+      "name": "access_token_minutes"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "f\"sqlite:///{BASE_DIR / 'docvault.db'}\"",
+      "environment_variable": "DOCVAULT_DATABASE_URL",
+      "name": "database_url"
+    },
+    {
+      "annotation": "Path",
+      "default_expression": "BASE_DIR / 'storage'",
+      "environment_variable": "DOCVAULT_STORAGE_DIR",
+      "name": "storage_dir"
+    },
+    {
+      "annotation": "int",
+      "default_expression": "50",
+      "environment_variable": "DOCVAULT_MAX_UPLOAD_MB",
+      "name": "max_upload_mb"
+    },
+    {
+      "annotation": "bool",
+      "default_expression": "False",
+      "environment_variable": "DOCVAULT_ENABLE_EMBEDDINGS",
+      "name": "enable_embeddings"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'auto'",
+      "environment_variable": "DOCVAULT_LLM_PROVIDER",
+      "name": "llm_provider"
+    },
+    {
+      "annotation": "int",
+      "default_expression": "9000",
+      "environment_variable": "DOCVAULT_RAG_MAX_CONTEXT_CHARS",
+      "name": "rag_max_context_chars"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'http://163.128.34.22:8000/v1'",
+      "environment_variable": "DOCVAULT_VLLM_URL",
+      "name": "vllm_url"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'gemma-4-31b'",
+      "environment_variable": "DOCVAULT_VLLM_MODEL",
+      "name": "vllm_model"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'http://localhost:11434'",
+      "environment_variable": "DOCVAULT_OLLAMA_URL",
+      "name": "ollama_url"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'gemma3:4b'",
+      "environment_variable": "DOCVAULT_OLLAMA_MODEL",
+      "name": "ollama_model"
+    },
+    {
+      "annotation": "str | None",
+      "default_expression": "<redacted>",
+      "environment_variable": "DOCVAULT_ANTHROPIC_API_KEY",
+      "name": "anthropic_api_key"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'claude-opus-4-8'",
+      "environment_variable": "DOCVAULT_RAG_MODEL",
+      "name": "rag_model"
+    },
+    {
+      "annotation": "list[str]",
+      "default_expression": "['http://localhost:5173', 'http://127.0.0.1:5173']",
+      "environment_variable": "DOCVAULT_CORS_ORIGINS",
+      "name": "cors_origins"
+    },
+    {
+      "annotation": "bool",
+      "default_expression": "True",
+      "environment_variable": "DOCVAULT_USE_DOCLING",
+      "name": "use_docling"
+    },
+    {
+      "annotation": "bool",
+      "default_expression": "True",
+      "environment_variable": "DOCVAULT_USE_QDRANT",
+      "name": "use_qdrant"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'http://localhost:6333'",
+      "environment_variable": "DOCVAULT_QDRANT_URL",
+      "name": "qdrant_url"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'docvault'",
+      "environment_variable": "DOCVAULT_QDRANT_COLLECTION",
+      "name": "qdrant_collection"
+    },
+    {
+      "annotation": "int",
+      "default_expression": "1024",
+      "environment_variable": "DOCVAULT_QDRANT_VECTOR_SIZE",
+      "name": "qdrant_vector_size"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'BAAI/bge-m3'",
+      "environment_variable": "DOCVAULT_EMBEDDING_MODEL",
+      "name": "embedding_model"
+    },
+    {
+      "annotation": "str",
+      "default_expression": "'BAAI/bge-reranker-v2-m3'",
+      "environment_variable": "DOCVAULT_RERANKER_MODEL",
+      "name": "reranker_model"
+    },
+    {
+      "annotation": "int",
+      "default_expression": "20",
+      "environment_variable": "DOCVAULT_RERANKER_TOP_K",
+      "name": "reranker_top_k"
+    },
+    {
+      "annotation": "Path",
+      "default_expression": "BASE_DIR / 'okf_bundle'",
+      "environment_variable": "DOCVAULT_OKF_BUNDLE_DIR",
+      "name": "okf_bundle_dir"
+    }
+  ],
+  "secret_values_included": false,
+  "source": "backend/app/config.py"
+}

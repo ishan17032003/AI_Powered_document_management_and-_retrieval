@@ -1,0 +1,34 @@
+{
+  "backup_verified": true,
+  "completed_at": "2026-07-26T20:53:32.181624+00:00",
+  "finding_counts": {
+    "checksum_mismatches": 0,
+    "current_hash_mismatches": 0,
+    "documents_without_versions": 0,
+    "fts_content_mismatches": 0,
+    "fts_duplicate_documents": 0,
+    "fts_extra_documents": 0,
+    "fts_missing_documents": 3,
+    "fts_title_mismatches": 0,
+    "invalid_file_keys": 0,
+    "missing_files": 3,
+    "orphan_files": 4,
+    "size_mismatches": 0,
+    "vector_state_unavailable": 1
+  },
+  "known_drift_preserved_not_repaired": true,
+  "reconciliation_clean": false,
+  "restore_verified": true,
+  "restored_api_read_verified": true,
+  "source_data_modified": false,
+  "source_stable": true,
+  "started_at": "2026-07-26T20:53:17.691623+00:00",
+  "status": "passed",
+  "tasks_supported": [
+    "BASE-001",
+    "BASE-002",
+    "BASE-003",
+    "BASE-004",
+    "SAFE-001"
+  ]
+}

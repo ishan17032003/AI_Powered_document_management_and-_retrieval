@@ -1,0 +1,34 @@
+title = "DocVault backend source secret policy"
+
+[extend]
+useDefault = true
+
+# These are authoritative runtime data or frontend-only assets, not backend source.
+# They are excluded from traversal so a security tool never reads real documents,
+# database pages, model caches, or unrelated frontend build output.
+[[allowlists]]
+description = "Non-source and out-of-scope data"
+paths = [
+  '''^artifacts/baseline/.*/(?:backup|restore|isolation)/''',
+  '''^backend/(?:\.runtime/|docvault\.db(?:-.*)?$|storage/)''',
+  '''^backend/(?:.*/)?__pycache__/''',
+  '''^backend/(?:.*/)?(?:\.mypy_cache|\.pytest_cache|\.ruff_cache)/''',
+  '''^backend/.*\.py[co]$''',
+  '''^(?:backend\.log|backend_logs\.txt)$''',
+  '''^frontend/''',
+]
+
+# Default Gitleaks rules focus on provider-shaped credentials. These project rules
+# also make DocVault's known unsafe signing-secret and demo-password defaults
+# blocking findings until CFG/SEC/AUTHN work removes them.
+[[rules]]
+id = "docvault-unsafe-signing-secret-default"
+description = "DocVault signing secret uses a known unsafe default"
+regex = '''(?:dev-only-change-me|change-me-in-production)'''
+keywords = ["dev-only-change-me", "change-me-in-production"]
+
+[[rules]]
+id = "docvault-demo-password"
+description = "DocVault demo account password is present in source"
+regex = '''(?:admin|contrib|viewer|auditor)123'''
+keywords = ["admin123", "contrib123", "viewer123", "auditor123"]

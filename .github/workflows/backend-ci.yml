@@ -1,0 +1,125 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: backend
+
+env:
+  CI: "true"
+  DOCVAULT_ENVIRONMENT: "test"
+  PYTHONDONTWRITEBYTECODE: "1"
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  quality-contract:
+    name: Backend quality and contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Python and uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          cache-dependency-glob: backend/uv.lock
+          enable-cache: true
+          python-version: "3.12"
+          version: "0.11.9"
+          working-directory: backend
+
+      - name: Install frozen development environment
+        run: uv sync --frozen
+
+      - name: Report pinned toolchain
+        run: |
+          uv --version
+          uv run --frozen python --version
+
+      - name: Verify formatting
+        run: uv run --frozen ruff format --check app scripts tests
+
+      - name: Lint
+        run: uv run --frozen ruff check app scripts tests
+
+      - name: Type-check
+        run: uv run --frozen mypy
+
+      - name: Show OpenAPI snapshot diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git diff --no-ext-diff --unified=20 "$BASE_SHA" -- openapi/openapi.json
+
+      - name: Validate API change classification
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DOCVAULT_PR_BODY: ${{ github.event.pull_request.body }}
+        run: uv run --frozen python -m scripts.check_api_pr --base "$BASE_SHA"
+
+      - name: Reject unreviewed OpenAPI drift
+        run: uv run --frozen python -m scripts.export_openapi --check
+
+      - name: Run labeled retrieval/RAG evaluation gates
+        run: >-
+          uv run --frozen python scripts/evaluate_retrieval.py
+          --dataset evaluation/labeled_retrieval_rag_v1.jsonl
+          --results evaluation/baseline_results.json
+          --output evaluation/ci-metrics.json
+
+  tests-coverage:
+    name: Backend tests and coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Python and uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          cache-dependency-glob: backend/uv.lock
+          enable-cache: true
+          python-version: "3.12"
+          version: "0.11.9"
+          working-directory: backend
+
+      - name: Install frozen development environment
+        run: uv sync --frozen
+
+      - name: Run unit, service, contract, regression, and API tests
+        run: >-
+          uv run --frozen pytest -q
+          --cov=app
+          --cov-branch
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+          --cov-fail-under=60
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          if [[ -f .coverage ]]; then
+            uv run --frozen coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          fi

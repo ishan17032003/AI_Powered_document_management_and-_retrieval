@@ -1,0 +1,39 @@
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+**/.venv*/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.egg-info/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+
+# Frontend dependencies/build output
+frontend/node_modules/
+frontend/dist/
+
+# Authoritative local application data
+backend/docvault.db
+backend/docvault.db-*
+backend/storage/
+backend/.runtime/
+
+# Baseline backup/restore payloads contain real documents and database data.
+# Keep the human-readable reports only when an evidence repository is configured.
+artifacts/baseline/*/backup/
+artifacts/baseline/*/restore/
+artifacts/baseline/*/isolation/
+
+# Local logs
+*.log
+
+# Ignore Markdown documentation except the root README
+*.md
+!/README.md

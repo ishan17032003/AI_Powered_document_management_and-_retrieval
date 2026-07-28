@@ -1,0 +1,70 @@
+{
+  "backup_file_count": 50,
+  "backup_restore_checksums_match_before_smoke": true,
+  "reconciliation_reproduced": true,
+  "restore_file_count_before_smoke": 50,
+  "restored_api_read": {
+    "item_count": 1,
+    "response_is_list": true,
+    "status_code": 200
+  },
+  "restored_foreign_key_violation_count": 0,
+  "restored_sqlite_quick_check": [
+    "ok"
+  ],
+  "restored_table_counts_unchanged_by_api_read": true,
+  "source_backup_restore_table_counts_match": true,
+  "source_signatures_after": {
+    "docvault.db": {
+      "inode": 24157520,
+      "mode": "0o644",
+      "mtime_ns": 1785088058461777551,
+      "path": "backend/docvault.db",
+      "size": 999424
+    },
+    "docvault.db-wal": {
+      "inode": 24158449,
+      "mode": "0o644",
+      "mtime_ns": 1785091541114132739,
+      "path": "backend/docvault.db-wal",
+      "size": 226632
+    }
+  },
+  "source_signatures_before": {
+    "docvault.db": {
+      "inode": 24157520,
+      "mode": "0o644",
+      "mtime_ns": 1785088058461777551,
+      "path": "backend/docvault.db",
+      "size": 999424
+    },
+    "docvault.db-wal": {
+      "inode": 24158449,
+      "mode": "0o644",
+      "mtime_ns": 1785091541114132739,
+      "path": "backend/docvault.db-wal",
+      "size": 226632
+    }
+  },
+  "source_stable": true,
+  "transient_shm_may_change_on_sqlite_read": true,
+  "transient_shm_signatures_after": {
+    "docvault.db-shm": {
+      "inode": 24158450,
+      "mode": "0o644",
+      "mtime_ns": 1785098989066120658,
+      "path": "backend/docvault.db-shm",
+      "size": 32768
+    }
+  },
+  "transient_shm_signatures_before": {
+    "docvault.db-shm": {
+      "inode": 24158450,
+      "mode": "0o644",
+      "mtime_ns": 1785098989066120658,
+      "path": "backend/docvault.db-shm",
+      "size": 32768
+    }
+  },
+  "verified_at": "2026-07-26T20:53:32.181367+00:00"
+}

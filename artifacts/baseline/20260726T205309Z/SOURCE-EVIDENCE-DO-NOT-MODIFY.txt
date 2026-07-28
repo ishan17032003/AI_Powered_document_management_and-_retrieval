@@ -1,0 +1,3 @@
+DOCVAULT SOURCE EVIDENCE — DO NOT MODIFY
+
+The source database/storage/OKF data were read only. Backup and restore payloads in this directory contain application data. Do not use this artifact as a repair target and do not commit its payload directories.

@@ -1,0 +1,5 @@
+{"case_id":"text-en-001","language":"en","query":"invoice total and due date","answerable":true,"relevant_document_ids":[101],"expected_citations":[{"document_id":101,"version_id":1,"page":1}],"material_claims":["The invoice has a due date."]}
+{"case_id":"text-hi-001","language":"hi","query":"बिल की कुल राशि","answerable":true,"relevant_document_ids":[102],"expected_citations":[{"document_id":102,"version_id":1,"page":2}],"material_claims":["The bill contains a total amount."]}
+{"case_id":"mixed-001","language":"mixed","query":"sanction order की तारीख","answerable":true,"relevant_document_ids":[103],"expected_citations":[{"document_id":103,"version_id":2,"page":1}],"material_claims":["The order has a sanction date."]}
+{"case_id":"no-answer-001","language":"en","query":"unrecorded retention exception","answerable":false,"relevant_document_ids":[],"expected_citations":[],"material_claims":[]}
+{"case_id":"acl-001","language":"en","query":"restricted cabinet decision","answerable":false,"relevant_document_ids":[],"expected_citations":[],"forbidden_document_ids":[999],"material_claims":[]}

@@ -1,0 +1,9 @@
+{
+  "isolated": true,
+  "path": "artifacts/baseline/20260726T205309Z/openapi.json",
+  "path_count": 20,
+  "sha256": "8245c2784be2cf1c22616df05c9e0be1f2a260168da2a787c4f007df56a78bdd",
+  "source_database_touched": false,
+  "title": "XENIUS DocVault API",
+  "version": "0.1.0"
+}
