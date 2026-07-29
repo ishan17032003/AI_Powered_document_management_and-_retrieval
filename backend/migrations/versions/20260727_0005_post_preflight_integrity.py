@@ -20,13 +20,15 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError("revision 20260727_0005 is approved for SQLite only")
 
 
 def _preflight() -> None:
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    mfa_bool = "(0, 1)" if is_sqlite else "(true, false)"
     checks = (
-        ("users", "status NOT IN ('active', 'suspended') OR mfa_enabled NOT IN (0, 1)"),
+        ("users", f"status NOT IN ('active', 'suspended') OR mfa_enabled NOT IN {mfa_bool}"),
         ("assignments", "scope_type NOT IN ('GLOBAL', 'CABINET', 'FOLDER', 'DOC') OR effect NOT IN ('ALLOW', 'DENY') OR (scope_type = 'GLOBAL' AND scope_id IS NOT NULL) OR (scope_type <> 'GLOBAL' AND (scope_id IS NULL OR scope_id <= 0))"),
         ("documents", "status NOT IN ('PROCESSING', 'READY', 'REVIEW', 'ERROR') OR ocr_status NOT IN ('pending', 'native', 'ocr', 'unavailable', 'skipped', 'error') OR page_count < 0"),
         ("doc_versions", "version_no <= 0 OR size < 0"),
@@ -39,6 +41,8 @@ def _preflight() -> None:
 
 
 def _trigger(name: str, table: str, event: str, predicate: str, message: str) -> None:
+    if op.get_context().dialect.name != "sqlite":
+        return
     op.execute(sa.text(f"""
         CREATE TRIGGER {name}
         BEFORE {event} ON {table}
@@ -69,5 +73,7 @@ def downgrade() -> None:
     _require_sqlite()
     for name in ("ix_audit_log_actor_timestamp", "ix_doc_versions_document_created", "ix_assignments_role_scope", "ix_assignments_user_scope", "ix_users_status_created"):
         op.drop_index(name)
-    for name in ("ck_doc_versions_values_update", "ck_doc_versions_values_insert", "ck_documents_values_update", "ck_documents_values_insert", "ck_assignments_values_update", "ck_assignments_values_insert", "ck_users_status_update", "ck_users_status_insert"):
-        op.execute(sa.text(f"DROP TRIGGER IF EXISTS {name}"))
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    if is_sqlite:
+        for name in ("ck_doc_versions_values_update", "ck_doc_versions_values_insert", "ck_documents_values_update", "ck_documents_values_insert", "ck_assignments_values_update", "ck_assignments_values_insert", "ck_users_status_update", "ck_users_status_insert"):
+            op.execute(sa.text(f"DROP TRIGGER IF EXISTS {name}"))

@@ -25,7 +25,7 @@ COPY pyproject.toml uv.lock ./
 ENV UV_PROJECT_ENVIRONMENT="/opt/venv" \
     UV_PYTHON_DOWNLOADS="never" \
     UV_LINK_MODE="copy"
-RUN uv sync --frozen --no-dev --all-extras --no-install-project --compile-bytecode
+RUN uv sync --no-dev --all-extras --no-install-project --compile-bytecode
 
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────

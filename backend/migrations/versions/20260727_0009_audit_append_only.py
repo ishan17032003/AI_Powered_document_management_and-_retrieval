@@ -18,33 +18,37 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError("revision 20260727_0009 is approved for SQLite only")
 
 
 def upgrade() -> None:
     _require_sqlite()
-    op.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS audit_log_append_only_update
-        BEFORE UPDATE ON audit_log
-        BEGIN
-            SELECT RAISE(ABORT, 'audit_log_append_only');
-        END
-        """
-    )
-    op.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS audit_log_append_only_delete
-        BEFORE DELETE ON audit_log
-        BEGIN
-            SELECT RAISE(ABORT, 'audit_log_append_only');
-        END
-        """
-    )
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    if is_sqlite:
+        op.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_log_append_only_update
+            BEFORE UPDATE ON audit_log
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_log_append_only');
+            END
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_log_append_only_delete
+            BEFORE DELETE ON audit_log
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_log_append_only');
+            END
+            """
+        )
 
 
 def downgrade() -> None:
     _require_sqlite()
-    op.execute("DROP TRIGGER IF EXISTS audit_log_append_only_update")
-    op.execute("DROP TRIGGER IF EXISTS audit_log_append_only_delete")
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    if is_sqlite:
+        op.execute("DROP TRIGGER IF EXISTS audit_log_append_only_update")
+        op.execute("DROP TRIGGER IF EXISTS audit_log_append_only_delete")

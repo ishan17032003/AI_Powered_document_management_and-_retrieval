@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -726,7 +727,7 @@ class Document(Base):
     failure_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     retention_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     legal_hold: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("0")
+        Boolean, default=False, server_default=false()
     )
     legal_hold_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
@@ -910,7 +911,7 @@ class VisualExtraction(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     language: Mapped[str | None] = mapped_column(String(40), nullable=True)
     quality_signals: Mapped[str] = mapped_column(Text, default="{}", server_default=sql_text("'{}'"))
-    trusted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"))
+    trusted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

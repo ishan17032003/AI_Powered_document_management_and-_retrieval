@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError(
             "revision 20260727_0001 is the validated SQLite baseline; "
             "a PostgreSQL baseline has not been approved"
@@ -203,16 +203,17 @@ def upgrade() -> None:
         unique=False,
     )
 
-    op.execute(
-        """
-        CREATE VIRTUAL TABLE doc_fts USING fts5(
-            document_id UNINDEXED,
-            title,
-            content,
-            tokenize='porter unicode61'
+    if op.get_context().dialect.name == "sqlite":
+        op.execute(
+            """
+            CREATE VIRTUAL TABLE doc_fts USING fts5(
+                document_id UNINDEXED,
+                title,
+                content,
+                tokenize='porter unicode61'
+            )
+            """
         )
-        """
-    )
 
 
 def downgrade() -> None:

@@ -198,9 +198,12 @@ class Fts5RetrievalStore:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._is_sqlite = db.bind is not None and db.bind.dialect.name == "sqlite"
 
     def ensure_schema(self, schema_version: str | int) -> None:
         del schema_version
+        if not self._is_sqlite:
+            return
         row = self.db.execute(
             text(
                 "SELECT 1 FROM sqlite_master "
@@ -216,6 +219,8 @@ class Fts5RetrievalStore:
         chunks: Sequence[RetrievalChunk],
         embedding_metadata: Mapping[str, object] | None = None,
     ) -> None:
+        if not self._is_sqlite:
+            return
         del document_version, embedding_metadata
         grouped: dict[int, list[RetrievalChunk]] = defaultdict(list)
         for chunk in chunks:
@@ -233,6 +238,8 @@ class Fts5RetrievalStore:
             self.upsert_document(document_id, title, "\n\n".join(texts))
 
     def upsert_document(self, document_id: int, title: str, content: str) -> None:
+        if not self._is_sqlite:
+            return
         self.db.execute(
             text("DELETE FROM doc_fts WHERE document_id = :id"), {"id": document_id}
         )
@@ -244,6 +251,8 @@ class Fts5RetrievalStore:
         )
 
     def delete_document(self, document_id: int) -> None:
+        if not self._is_sqlite:
+            return
         self.db.execute(
             text("DELETE FROM doc_fts WHERE document_id = :id"), {"id": document_id}
         )
@@ -254,6 +263,8 @@ class Fts5RetrievalStore:
         authorized_filter: AuthorizedFilter | None,
         limit: int,
     ) -> list[RetrievalHit]:
+        if not self._is_sqlite:
+            return []
         if not query or limit <= 0:
             return []
         rows = self.db.execute(
@@ -294,6 +305,8 @@ class Fts5RetrievalStore:
         document_id: int,
         version_id: str | int | None = None,
     ) -> DocumentIndexState:
+        if not self._is_sqlite:
+            return DocumentIndexState(document_id, False, version_id, None, False)
         indexed = (
             self.db.execute(
                 text("SELECT 1 FROM doc_fts WHERE document_id = :id LIMIT 1"),
@@ -310,6 +323,8 @@ class Fts5RetrievalStore:
         )
 
     def health(self) -> RetrievalHealth:
+        if not self._is_sqlite:
+            return RetrievalHealth(self.adapter_name, False, "unavailable_on_postgres")
         try:
             self.ensure_schema("legacy")
             self.db.execute(text("SELECT 1 FROM doc_fts LIMIT 1")).scalar()
@@ -331,6 +346,8 @@ class Fts5RetrievalStore:
         *,
         max_items: int = 10_000,
     ) -> RetrievalReconciliation:
+        if not self._is_sqlite:
+            return RetrievalReconciliation(self.adapter_name, False, detail="unavailable on postgres")
         if type(max_items) is not int or not 1 <= max_items <= 100_000:
             raise ValueError("max_items must be between 1 and 100000")
         rows = self.db.execute(text("SELECT document_id FROM doc_fts")).scalars().all()

@@ -19,7 +19,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: "${DOCVAULT_BACKEND_IMAGE:?Set DOCVAULT_BACKEND_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_BACKEND_IMAGE:-xenius-docvault-backend:latest}"
     container_name: docvault-backend
     restart: unless-stopped
     user: "10001:10001"
@@ -40,7 +40,7 @@ services:
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-production}"
       DOCVAULT_DEBUG: "${DOCVAULT_DEBUG:-false}"
       DOCVAULT_ENABLE_DEMO_SEED: "${DOCVAULT_ENABLE_DEMO_SEED:-false}"
-      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-sqlite:////data/docvault.db}"
+      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
       DOCVAULT_STORAGE_DIR: "/data/storage"
       DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"
       DOCVAULT_ACCESS_TOKEN_MINUTES: "${DOCVAULT_ACCESS_TOKEN_MINUTES:-480}"
@@ -114,7 +114,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: "${DOCVAULT_BACKEND_IMAGE:?Set DOCVAULT_BACKEND_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_BACKEND_IMAGE:-xenius-docvault-backend:latest}"
     container_name: docvault-ingestion-worker
     restart: unless-stopped
     user: "10001:10001"
@@ -130,7 +130,7 @@ services:
         required: false
     environment:
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-production}"
-      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-sqlite:////data/docvault.db}"
+      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
       DOCVAULT_STORAGE_DIR: "/data/storage"
       DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"
       DOCVAULT_USE_QDRANT: "${DOCVAULT_USE_QDRANT:-false}"
@@ -151,29 +151,31 @@ services:
         condition: service_started
     networks:
       - docvault-data-net
+    healthcheck:
+      disable: true
 
   # One-shot operational roles. Run with `docker compose --profile ops run
   # --rm migration` (and similarly maintenance/backup); none shares the web
   # process command or HTTP listener.
   migration:
     profiles: ["ops"]
-    image: "${DOCVAULT_BACKEND_IMAGE:?Set DOCVAULT_BACKEND_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_BACKEND_IMAGE:-xenius-docvault-backend:latest}"
     entrypoint: ["/usr/local/bin/docvault-process"]
     command: ["migrate"]
     env_file: [{path: .env, required: false}]
     environment:
-      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-sqlite:////data/docvault.db}"
+      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
     volumes: ["docvault_db:/data"]
     networks: ["docvault-data-net"]
 
   maintenance:
     profiles: ["ops"]
-    image: "${DOCVAULT_BACKEND_IMAGE:?Set DOCVAULT_BACKEND_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_BACKEND_IMAGE:-xenius-docvault-backend:latest}"
     entrypoint: ["/usr/local/bin/docvault-process"]
     command: ["maintenance"]
     env_file: [{path: .env, required: false}]
     environment:
-      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-sqlite:////data/docvault.db}"
+      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
     volumes: ["docvault_db:/data"]
     networks: ["docvault-data-net"]
 
@@ -184,17 +186,15 @@ services:
     command: ["backup"]
     env_file: [{path: .env, required: false}]
     environment:
-      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-sqlite:////data/docvault.db}"
+      DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
       DOCVAULT_BACKUP_DESTINATION: "${DOCVAULT_BACKUP_DESTINATION:-}"
       DOCVAULT_BACKUP_QUIESCENT: "${DOCVAULT_BACKUP_QUIESCENT:-false}"
     volumes: ["docvault_db:/data"]
     networks: ["docvault-data-net"]
 
   qdrant:
-    image: "${DOCVAULT_QDRANT_IMAGE:?Set DOCVAULT_QDRANT_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_QDRANT_IMAGE:-qdrant/qdrant:latest}"
     restart: unless-stopped
-    user: "1000:1000"
-    read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     tmpfs:
@@ -204,13 +204,31 @@ services:
     networks:
       - docvault-data-net
 
+  postgres:
+    image: "postgres:15-alpine"
+    container_name: docvault-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: docvault
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - docvault-data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d docvault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 
   # ── React + Nginx frontend ──────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: "${DOCVAULT_FRONTEND_IMAGE:?Set DOCVAULT_FRONTEND_IMAGE to an immutable @sha256 image reference}"
+    image: "${DOCVAULT_FRONTEND_IMAGE:-xenius-docvault-frontend:latest}"
     container_name: docvault-frontend
     restart: unless-stopped
     read_only: true
@@ -236,20 +254,15 @@ services:
 # ── Named volumes ─────────────────────────────────────────────────────────────
 volumes:
   docvault_db:
-    driver: local
-    # To use a host directory instead (easier to back up), replace with:
-    # driver_opts:
-    #   type: none
-    #   o: bind
-    #   device: /path/on/host/docvault_data
-
+    name: ddms_docvault_db
+    external: true
   hf_cache:
-    driver: local
-    # Stores lazily loaded BAAI/bge-m3 and reranker weights across restarts.
-    # Delete this volume only if you want to force a fresh download:
-    #   docker volume rm ddms_hf_cache
-
+    name: ddms_hf_cache
+    external: true
   qdrant_data:
+    name: ddms_qdrant_data
+    external: true
+  postgres_data:
     driver: local
 
 
@@ -266,4 +279,5 @@ networks:
 
 secrets:
   docvault_secret_key:
-    external: true
+    file: ./secrets/docvault_secret_key
+ 

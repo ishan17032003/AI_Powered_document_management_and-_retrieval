@@ -88,15 +88,28 @@ def _normalize_now(value: object) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-_VISIBLE_DOCUMENT_QUERY = text(
-    """
+def _build_visible_document_query(dialect_name: str) -> object:
+    """Build the recursive visible document query for the current DB dialect."""
+    if dialect_name == "sqlite":
+        bool_true = "1"
+        bool_false = "0"
+        cycle_expr_folder = "instr(fc.visited, ',' || CAST(parent.id AS TEXT) || ',')"
+        cycle_expr_cabinet = "instr(cc.visited, ',' || CAST(parent.id AS TEXT) || ',')"
+    else:
+        # PostgreSQL
+        bool_true = "TRUE"
+        bool_false = "FALSE"
+        cycle_expr_folder = "POSITION(',' || CAST(parent.id AS TEXT) || ',' IN fc.visited)"
+        cycle_expr_cabinet = "POSITION(',' || CAST(parent.id AS TEXT) || ',' IN cc.visited)"
+
+    return text(f"""
 WITH RECURSIVE
 group_principals(principal_type, principal_id) AS (
     SELECT 'GROUP', gm.group_id
     FROM group_memberships AS gm
     JOIN groups AS g ON g.id = gm.group_id
     WHERE gm.user_id = :user_id
-      AND g.is_active = 1
+      AND g.is_active = {bool_true}
     ORDER BY gm.group_id
     LIMIT :group_limit_plus_one
 ),
@@ -134,8 +147,8 @@ rule_source AS (
                  AND (ar.scope_id IS NULL OR ar.scope_id <= 0)
                 THEN 1
             WHEN ar.effect NOT IN ('ALLOW', 'DENY') THEN 1
-            WHEN ar.inherits NOT IN (0, 1) THEN 1
-            WHEN ar.is_active NOT IN (0, 1) THEN 1
+            WHEN ar.inherits NOT IN ({bool_false}, {bool_true}) THEN 1
+            WHEN ar.is_active NOT IN ({bool_false}, {bool_true}) THEN 1
             ELSE 0
         END AS invalid_data
     FROM access_rules AS ar
@@ -147,9 +160,9 @@ rule_source AS (
               ELSE ar.group_id
           END)
     WHERE p.code = :permission
-      AND ar.is_active = 1
+      AND ar.is_active = {bool_true}
       AND (ar.expires_at IS NULL OR ar.expires_at > :query_now)
-      AND (ar.scope_type = 'DOC' OR ar.inherits = 1)
+      AND (ar.scope_type = 'DOC' OR ar.inherits = {bool_true})
     ORDER BY ar.id
     LIMIT :rule_limit_plus_one
 ),
@@ -183,7 +196,7 @@ folder_chain(
         fc.depth + 1,
         fc.visited || CAST(parent.id AS TEXT) || ',',
         CASE
-            WHEN instr(fc.visited, ',' || CAST(parent.id AS TEXT) || ',') > 0
+            WHEN {cycle_expr_folder} > 0
                 THEN 1
             ELSE 0
         END
@@ -232,7 +245,7 @@ cabinet_chain(doc_id, cabinet_id, parent_id, depth, visited, cycle) AS (
         cc.depth + 1,
         cc.visited || CAST(parent.id AS TEXT) || ',',
         CASE
-            WHEN instr(cc.visited, ',' || CAST(parent.id AS TEXT) || ',') > 0
+            WHEN {cycle_expr_cabinet} > 0
                 THEN 1
             ELSE 0
         END
@@ -336,8 +349,7 @@ WHERE rs.invalid_data = 0
   AND d.has_allow = 1
 ORDER BY d.doc_id
 LIMIT :document_limit_plus_one
-"""
-)
+""")
 
 
 def resolve_visible_document_ids(
@@ -374,8 +386,10 @@ def resolve_visible_document_ids(
         return frozenset()
     if permission not in effective_permissions:
         return frozenset()
-    if db.get_bind().dialect.name != "sqlite":
-        raise VisibleDocumentResolutionUnavailable("AUTHZ_SQL_DIALECT_UNSUPPORTED")
+    is_sqlite = db.get_bind().dialect.name == "sqlite"
+    query_now = normalized_now.replace(tzinfo=None)
+    if is_sqlite:
+        query_now = query_now.strftime("%Y-%m-%d %H:%M:%S.%f")
 
     params: dict[str, object] = {
         "user_id": user_id,
@@ -383,9 +397,7 @@ def resolve_visible_document_ids(
         # SQLite DateTime values are persisted as UTC-naive text with six
         # fractional-second digits.  Bind the same canonical representation so
         # the exclusive expiry comparison remains correct at second boundaries.
-        "query_now": normalized_now.replace(tzinfo=None).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        ),
+        "query_now": query_now,
         "rule_limit_plus_one": limits.max_rules + 1,
         "max_rules": limits.max_rules,
         "group_limit_plus_one": limits.max_groups + 1,
@@ -394,7 +406,7 @@ def resolve_visible_document_ids(
         "document_limit_plus_one": limits.max_document_ids + 1,
     }
 
-    rows = db.execute(_VISIBLE_DOCUMENT_QUERY, params).all()
+    rows = db.execute(_build_visible_document_query(db.get_bind().dialect.name), params).all()
     if len(rows) > limits.max_document_ids:
         raise VisibleDocumentResolutionUnavailable("AUTHZ_DOCUMENT_ID_LIMIT")
     try:

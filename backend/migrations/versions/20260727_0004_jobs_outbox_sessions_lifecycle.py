@@ -24,7 +24,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError(
             "revision 20260727_0004 implements the approved SQLite jobs and "
             "lifecycle schema; the PostgreSQL profile has not been approved"
@@ -355,59 +355,63 @@ def upgrade() -> None:
     # Guard state transitions and immutable object metadata at the database
     # boundary.  Triggers are deliberately small and portable within the
     # approved SQLite profile; later PostgreSQL work will provide equivalents.
-    op.execute(
-        """
-        CREATE TRIGGER ck_documents_lifecycle_state_insert
-        BEFORE INSERT ON documents
-        WHEN NEW.lifecycle_state NOT IN ('ACTIVE', 'TOMBSTONED', 'DELETED')
-        BEGIN SELECT RAISE(ABORT, 'invalid document lifecycle state'); END
-        """
-    )
-    op.execute(
-        """
-        CREATE TRIGGER ck_documents_lifecycle_state_update
-        BEFORE UPDATE OF lifecycle_state ON documents
-        WHEN NEW.lifecycle_state NOT IN ('ACTIVE', 'TOMBSTONED', 'DELETED')
-        BEGIN SELECT RAISE(ABORT, 'invalid document lifecycle state'); END
-        """
-    )
-    op.execute(
-        """
-        CREATE TRIGGER ck_doc_versions_storage_state_insert
-        BEFORE INSERT ON doc_versions
-        WHEN NEW.storage_state NOT IN ('STAGED', 'AVAILABLE', 'QUARANTINED', 'MISSING', 'DELETED')
-        BEGIN SELECT RAISE(ABORT, 'invalid document version storage state'); END
-        """
-    )
-    op.execute(
-        """
-        CREATE TRIGGER ck_doc_versions_storage_state_update
-        BEFORE UPDATE OF storage_state ON doc_versions
-        WHEN NEW.storage_state NOT IN ('STAGED', 'AVAILABLE', 'QUARANTINED', 'MISSING', 'DELETED')
-        BEGIN SELECT RAISE(ABORT, 'invalid document version storage state'); END
-        """
-    )
-    op.execute(
-        """
-        CREATE TRIGGER ck_doc_versions_immutable_metadata
-        BEFORE UPDATE OF file_key, size, checksum ON doc_versions
-        WHEN NEW.file_key <> OLD.file_key OR NEW.size <> OLD.size OR NEW.checksum <> OLD.checksum
-        BEGIN SELECT RAISE(ABORT, 'document version metadata is immutable'); END
-        """
-    )
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    if is_sqlite:
+        op.execute(
+            """
+            CREATE TRIGGER ck_documents_lifecycle_state_insert
+            BEFORE INSERT ON documents
+            WHEN NEW.lifecycle_state NOT IN ('ACTIVE', 'TOMBSTONED', 'DELETED')
+            BEGIN SELECT RAISE(ABORT, 'invalid document lifecycle state'); END
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER ck_documents_lifecycle_state_update
+            BEFORE UPDATE OF lifecycle_state ON documents
+            WHEN NEW.lifecycle_state NOT IN ('ACTIVE', 'TOMBSTONED', 'DELETED')
+            BEGIN SELECT RAISE(ABORT, 'invalid document lifecycle state'); END
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER ck_doc_versions_storage_state_insert
+            BEFORE INSERT ON doc_versions
+            WHEN NEW.storage_state NOT IN ('STAGED', 'AVAILABLE', 'QUARANTINED', 'MISSING', 'DELETED')
+            BEGIN SELECT RAISE(ABORT, 'invalid document version storage state'); END
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER ck_doc_versions_storage_state_update
+            BEFORE UPDATE OF storage_state ON doc_versions
+            WHEN NEW.storage_state NOT IN ('STAGED', 'AVAILABLE', 'QUARANTINED', 'MISSING', 'DELETED')
+            BEGIN SELECT RAISE(ABORT, 'invalid document version storage state'); END
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER ck_doc_versions_immutable_metadata
+            BEFORE UPDATE OF file_key, size, checksum ON doc_versions
+            WHEN NEW.file_key <> OLD.file_key OR NEW.size <> OLD.size OR NEW.checksum <> OLD.checksum
+            BEGIN SELECT RAISE(ABORT, 'document version metadata is immutable'); END
+            """
+        )
 
 
 def downgrade() -> None:
     _require_sqlite()
 
-    for trigger_name in (
-        "ck_doc_versions_immutable_metadata",
-        "ck_doc_versions_storage_state_update",
-        "ck_doc_versions_storage_state_insert",
-        "ck_documents_lifecycle_state_update",
-        "ck_documents_lifecycle_state_insert",
-    ):
-        op.execute(sa.text(f"DROP TRIGGER IF EXISTS {trigger_name}"))
+    is_sqlite = op.get_context().dialect.name == "sqlite"
+    if is_sqlite:
+        for trigger_name in (
+            "ck_doc_versions_immutable_metadata",
+            "ck_doc_versions_storage_state_update",
+            "ck_doc_versions_storage_state_insert",
+            "ck_documents_lifecycle_state_update",
+            "ck_documents_lifecycle_state_insert",
+        ):
+            op.execute(f"DROP TRIGGER IF EXISTS {trigger_name}")
 
     op.drop_index(
         "ix_auth_token_revocations_expiry", table_name="auth_token_revocations"

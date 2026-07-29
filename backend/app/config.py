@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # value when the operator has not supplied one.
     secret_key: str = ""
     algorithm: str = "HS256"
-    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    access_token_minutes: int = Field(default=15, ge=1, le=1440)
     jwt_issuer: str = "docvault"
     jwt_audience: str = "docvault-api"
     # D-06 decision: hardened local authentication for the first controlled
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     login_block_seconds: int = Field(default=60, ge=1, le=86_400)
     login_rate_limit_max_entries: int = Field(default=10_000, ge=2, le=100_000)
 
-    database_url: str = f"sqlite:///{BASE_DIR / 'docvault.db'}"
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/docvault"
     storage_dir: Path = BASE_DIR / "storage"
 
     # Client address forwarding is disabled by default.  When an operator

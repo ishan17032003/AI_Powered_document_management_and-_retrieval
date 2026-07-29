@@ -37,3 +37,4 @@ artifacts/baseline/*/isolation/
 # Ignore Markdown documentation except the root README
 *.md
 !/README.md
+secrets/

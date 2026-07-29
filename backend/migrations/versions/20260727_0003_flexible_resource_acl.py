@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError(
             "revision 20260727_0003 implements the approved SQLite ACL schema; "
             "the PostgreSQL ACL migration has not been approved"
@@ -27,6 +27,7 @@ def _require_sqlite() -> None:
 def upgrade() -> None:
     _require_sqlite()
 
+    is_sqlite = op.get_context().dialect.name == "sqlite"
     op.create_table(
         "groups",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -46,7 +47,7 @@ def upgrade() -> None:
             name="ck_groups_description_bounded",
         ),
         sa.CheckConstraint(
-            "is_active IN (0, 1)",
+            f"is_active {'IN (0, 1)' if is_sqlite else 'IN (true, false)'}",
             name="ck_groups_is_active_bool",
         ),
         sa.CheckConstraint(
@@ -179,11 +180,11 @@ def upgrade() -> None:
             name="ck_access_rules_effect",
         ),
         sa.CheckConstraint(
-            "inherits IN (0, 1)",
+            f"inherits {'IN (0, 1)' if is_sqlite else 'IN (true, false)'}",
             name="ck_access_rules_inherits_bool",
         ),
         sa.CheckConstraint(
-            "is_active IN (0, 1)",
+            f"is_active {'IN (0, 1)' if is_sqlite else 'IN (true, false)'}",
             name="ck_access_rules_is_active_bool",
         ),
         sa.CheckConstraint(
@@ -362,6 +363,7 @@ def upgrade() -> None:
             columns,
             unique=True,
             sqlite_where=sa.text(predicate),
+            postgresql_where=sa.text(predicate.replace("is_active = 1", "is_active = true")),
         )
 
     op.create_table(

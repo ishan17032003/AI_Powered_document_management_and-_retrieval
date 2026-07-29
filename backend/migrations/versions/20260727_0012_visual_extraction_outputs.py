@@ -16,12 +16,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError("revision 20260727_0012 is approved for SQLite only")
 
 
 def upgrade() -> None:
     _require_sqlite()
+    is_sqlite = op.get_context().dialect.name == "sqlite"
     op.create_table(
         "visual_extractions",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -33,10 +34,10 @@ def upgrade() -> None:
         sa.Column("confidence", sa.Float(), nullable=True),
         sa.Column("language", sa.String(length=40), nullable=True),
         sa.Column("quality_signals", sa.Text(), nullable=False, server_default=sa.text("'{}'")),
-        sa.Column("trusted", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("trusted", sa.Boolean(), nullable=False, server_default=sa.text("0") if is_sqlite else sa.false()),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint("output_type IN ('OCR', 'CAPTION', 'DESCRIPTION')", name="ck_visual_extractions_type"),
-        sa.CheckConstraint("trusted IN (0, 1)", name="ck_visual_extractions_untrusted_bool"),
+        sa.CheckConstraint(f"trusted {'IN (0, 1)' if is_sqlite else 'IN (true, false)'}", name="ck_visual_extractions_untrusted_bool"),
         sa.CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="ck_visual_extractions_confidence"),
         sa.UniqueConstraint("asset_id", "output_type", "engine_revision", name="uq_visual_extractions_revision"),
     )

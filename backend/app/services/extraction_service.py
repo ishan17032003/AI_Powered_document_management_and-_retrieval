@@ -33,7 +33,14 @@ from ..utils.request_context import bound_request_context, worker_context
 
 # Docling — layout-aware, structure-preserving parser (Tier 0 preferred path).
 try:
-    from docling.document_converter import DocumentConverter as _DoclingConverter
+    from docling.document_converter import DocumentConverter as _DoclingConverter, PdfFormatOption
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+        PdfPipelineOptions,
+        RapidOcrOptions,
+    )
 
     _HAS_DOCLING = True
 except Exception:  # pragma: no cover
@@ -63,7 +70,72 @@ def _get_docling_converter():
         if not _HAS_DOCLING:
             return None
         try:
-            _docling_converter = _DoclingConverter()
+            # Store all Docling model artifacts in the persistent writable volume
+            # so they survive container restarts and are never downloaded into
+            # the read-only /opt/venv package directory.
+            _docling_artifacts_path = Path("/data/docvault-docling-artifacts")
+            _docling_artifacts_path.mkdir(parents=True, exist_ok=True)
+
+            # The torch backend is used because torch is already installed in
+            # the container image (required by the SigLIP2 visual lane).
+            # onnxruntime is not installed, so using torch avoids an extra dep.
+            #
+            # Docling's RapidOcrModel resolves paths as:
+            #   artifacts_path / _model_repo_folder / <relative_path>
+            # where _model_repo_folder = "RapidOcr"
+            # and for torch/english the relative paths are:
+            #   torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth   (det)
+            #   torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth  (cls)
+            #   torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth   (rec)
+            #   paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt  (keys)
+            _repo_dir = _docling_artifacts_path / "rapidocr" / "RapidOcr"
+            _det = _repo_dir / "torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth"
+            _cls = _repo_dir / "torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth"
+            _rec = _repo_dir / "torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth"
+            _keys = _repo_dir / "paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt"
+
+            # Only provide explicit paths once all model files are on disk.
+            # With explicit paths, RapidOCR loads locally without any network
+            # traffic.  If files are missing (first run), artifacts_path drives
+            # the one-time download into the writable volume.
+            _ocr_opts: RapidOcrOptions
+            if _det.exists() and _cls.exists() and _rec.exists():
+                _ocr_opts = RapidOcrOptions(
+                    lang=["english"],
+                    backend="torch",
+                    det_model_path=str(_det),
+                    cls_model_path=str(_cls),
+                    rec_model_path=str(_rec),
+                    rec_keys_path=str(_keys) if _keys.exists() else None,
+                )
+            else:
+                # Models not yet staged — let artifacts_path drive the
+                # one-time download into the writable volume.
+                _ocr_opts = RapidOcrOptions(
+                    lang=["english"],
+                    backend="torch",
+                )
+
+            _pdf_pipeline_options = PdfPipelineOptions(
+                do_ocr=True,
+                do_table_structure=True,
+                # artifacts_path is used by Docling's own layout/table models
+                # (model.safetensors) AND as the fallback for RapidOCR when
+                # explicit paths are not yet available.
+                artifacts_path=_docling_artifacts_path,
+                ocr_options=_ocr_opts,
+                accelerator_options=AcceleratorOptions(
+                    device=AcceleratorDevice.CPU,
+                ),
+            )
+            _docling_converter = _DoclingConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(
+                        pipeline_options=_pdf_pipeline_options
+                    )
+                }
+            )
+
             emit_event(
                 "extraction.engine.initialized",
                 component="extraction",

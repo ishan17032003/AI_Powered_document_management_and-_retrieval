@@ -85,8 +85,22 @@ class AuthorizationDecisionInputs:
     evaluated_at: datetime
 
 
-_ANCESTRY_QUERY = text(
+def _build_ancestry_query(dialect_name: str) -> object:
+    """Build the recursive ancestry CTE for the current DB dialect.
+
+    SQLite uses ``instr(haystack, needle)`` while PostgreSQL uses
+    ``POSITION(needle IN haystack)``.  Both return an integer > 0 when the
+    needle is found, so the cycle‑detection logic is identical.
     """
+    if dialect_name == "sqlite":
+        cycle_expr_folder = "instr(child.visited, ',' || CAST(parent.id AS TEXT) || ',')"
+        cycle_expr_cabinet = "instr(child.visited, ',' || CAST(parent.id AS TEXT) || ',')"
+    else:
+        # PostgreSQL: POSITION(needle IN haystack)
+        cycle_expr_folder = "POSITION(',' || CAST(parent.id AS TEXT) || ',' IN child.visited)"
+        cycle_expr_cabinet = "POSITION(',' || CAST(parent.id AS TEXT) || ',' IN child.visited)"
+
+    return text(f"""
     WITH RECURSIVE
     target_folder(id, cabinet_id, parent_id) AS (
         SELECT f.id, f.cabinet_id, f.parent_id
@@ -122,10 +136,7 @@ _ANCESTRY_QUERY = text(
             child.depth + 1,
             child.visited || CAST(parent.id AS TEXT) || ',',
             CASE
-                WHEN instr(
-                    child.visited,
-                    ',' || CAST(parent.id AS TEXT) || ','
-                ) > 0
+                WHEN {cycle_expr_folder} > 0
                 THEN 1
                 ELSE 0
             END
@@ -161,10 +172,7 @@ _ANCESTRY_QUERY = text(
             child.depth + 1,
             child.visited || CAST(parent.id AS TEXT) || ',',
             CASE
-                WHEN instr(
-                    child.visited,
-                    ',' || CAST(parent.id AS TEXT) || ','
-                ) > 0
+                WHEN {cycle_expr_cabinet} > 0
                 THEN 1
                 ELSE 0
             END
@@ -191,8 +199,7 @@ _ANCESTRY_QUERY = text(
         fp.depth AS depth,
         fp.cycle AS cycle
     FROM folder_path AS fp
-    """
-)
+    """)
 
 
 def _require_limit(value: object, *, field: str, hard_maximum: int) -> int:
@@ -423,7 +430,7 @@ def resolve_resource_ancestry(
     resource_id = _require_positive_id(resource.resource_id, field="resource_id")
     rows = (
         db.execute(
-            _ANCESTRY_QUERY,
+            _build_ancestry_query(db.get_bind().dialect.name),
             {
                 "scope_type": resource.scope.value,
                 "resource_id": resource_id,

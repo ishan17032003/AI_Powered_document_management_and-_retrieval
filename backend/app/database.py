@@ -12,24 +12,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from .observability import emit_event
 from .runtime import settings
 
-_connect_args = (
-    {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-)
+_connect_args = {}
 engine = create_engine(settings.database_url, connect_args=_connect_args, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-
-
-@event.listens_for(engine, "connect")
-def _sqlite_pragmas(dbapi_conn, _):
-    """Enable foreign keys + WAL for the local SQLite backend."""
-    if settings.database_url.startswith("sqlite"):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys=ON")
-        cur.execute("PRAGMA journal_mode=WAL")
-        # Wait up to 10s for a lock instead of failing immediately — a long-running
-        # answer request can hold a connection open while other requests write.
-        cur.execute("PRAGMA busy_timeout=30000")
-        cur.close()
 
 
 @event.listens_for(engine, "before_cursor_execute")

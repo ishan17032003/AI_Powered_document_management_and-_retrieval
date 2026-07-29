@@ -19,11 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-SOURCE_DATABASE_FILES = (
-    BACKEND_DIR / "docvault.db",
-    BACKEND_DIR / "docvault.db-wal",
-    BACKEND_DIR / "docvault.db-shm",
-)
+SOURCE_DATABASE_FILES = ()
 SOURCE_STORAGE = BACKEND_DIR / "storage"
 ALEMBIC_INI = BACKEND_DIR / "alembic.ini"
 
@@ -69,11 +65,11 @@ def _purge_app_modules() -> None:
             sys.modules.pop(name, None)
 
 
-def _migrate_test_database(database: Path) -> None:
+def _migrate_test_database(db_url: str) -> None:
     """Explicitly migrate one isolated test database to the packaged head."""
 
     config = Config(str(ALEMBIC_INI))
-    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    config.set_main_option("sqlalchemy.url", db_url)
     command.upgrade(config, "head")
 
 
@@ -94,18 +90,19 @@ def test_paths(tmp_path: Path) -> TestPaths:
     okf_bundle.mkdir()
     return TestPaths(
         root=tmp_path,
-        database=tmp_path / "docvault-test.db",
+        database=Path("dummy"), # Unused for postgres but kept for object shape
         storage=storage,
         okf_bundle=okf_bundle,
     )
 
 
 @pytest.fixture
-def migrated_test_database(test_paths: TestPaths) -> Path:
+def migrated_test_database(test_paths: TestPaths) -> str:
     """Provide an explicitly migrated isolated DB for subprocess/CLI tests."""
-
-    _migrate_test_database(test_paths.database)
-    return test_paths.database
+    import os
+    db_url = os.getenv("TEST_DATABASE_URL", "postgresql+psycopg://postgres:postgres@postgres:5432/docvault_test")
+    _migrate_test_database(db_url)
+    return db_url
 
 
 @pytest.fixture
@@ -115,9 +112,11 @@ def settings_env(
 ) -> Iterator[dict[str, str]]:
     """Configure an offline, lightweight application against temporary paths."""
     _purge_app_modules()
+    import os
+    db_url = os.getenv("TEST_DATABASE_URL", "postgresql+psycopg://postgres:postgres@postgres:5432/docvault_test")
     values = {
         "DOCVAULT_ENVIRONMENT": "test",
-        "DOCVAULT_DATABASE_URL": f"sqlite:///{test_paths.database}",
+        "DOCVAULT_DATABASE_URL": db_url,
         "DOCVAULT_DEBUG": "false",
         "DOCVAULT_ENABLE_DEMO_SEED": "true",
         "DOCVAULT_STORAGE_DIR": str(test_paths.storage),
@@ -143,10 +142,8 @@ def app_factory(settings_env: dict[str, str]) -> Iterator[Callable[[], FastAPI]]
 
     def factory() -> FastAPI:
         _purge_app_modules()
-        database_path = Path(
-            settings_env["DOCVAULT_DATABASE_URL"].removeprefix("sqlite:///")
-        )
-        _migrate_test_database(database_path)
+        db_url = settings_env["DOCVAULT_DATABASE_URL"]
+        _migrate_test_database(db_url)
         main = importlib.import_module("app.main")
         return main.app
 
@@ -225,10 +222,8 @@ def admin_client(
 
 @pytest.fixture
 def db_session(settings_env: dict[str, str]) -> Iterator[Session]:
-    database_path = Path(
-        settings_env["DOCVAULT_DATABASE_URL"].removeprefix("sqlite:///")
-    )
-    _migrate_test_database(database_path)
+    db_url = settings_env["DOCVAULT_DATABASE_URL"]
+    _migrate_test_database(db_url)
     database = importlib.import_module("app.database")
     session = database.SessionLocal()
     try:

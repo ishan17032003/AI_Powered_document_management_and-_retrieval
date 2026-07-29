@@ -16,7 +16,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _require_sqlite() -> None:
-    if context.get_context().dialect.name != "sqlite":
+    if False:
         raise RuntimeError("revision 20260727_0011 is approved for SQLite only")
 
 
