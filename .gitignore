@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+docker-compose.override.yml
 
 # Python environments and caches
 **/.venv*/

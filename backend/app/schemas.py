@@ -441,3 +441,28 @@ class AdminRoleAssignment(RequestModel):
 
 class AdminCredentialReset(RequestModel):
     password: str = Field(min_length=16, max_length=256)
+
+
+# ── Document reclassification (Super Admin only) ──────────────────────────────
+
+class ReclassifyDocument(RequestModel):
+    """Super Admin body for manually changing a document's class.
+
+    Either ``class_id`` (existing class) **or** ``class_name`` (new or
+    existing name, looked up / created on the fly) may be supplied.
+    Supplying neither clears the class (sets to Uncategorized).
+    """
+
+    class_id: int | None = Field(default=None, gt=0)
+    class_name: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class DocClassOut(BaseModel):
+    """Public projection of a DocClass taxonomy entry."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    parent_id: int | None = None
+

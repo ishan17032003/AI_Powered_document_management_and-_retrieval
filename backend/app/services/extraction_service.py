@@ -73,25 +73,25 @@ def _get_docling_converter():
             # Store all Docling model artifacts in the persistent writable volume
             # so they survive container restarts and are never downloaded into
             # the read-only /opt/venv package directory.
-            _docling_artifacts_path = Path("/data/docvault-docling-artifacts")
+            _docling_artifacts_path = settings.storage_dir / "docvault-docling-artifacts"
             _docling_artifacts_path.mkdir(parents=True, exist_ok=True)
 
-            # The torch backend is used because torch is already installed in
-            # the container image (required by the SigLIP2 visual lane).
-            # onnxruntime is not installed, so using torch avoids an extra dep.
+            # Use the onnxruntime backend — it is installed via docling[rapidocr]
+            # in the ai extra and works on every deployment, including those
+            # without the visual extra (which is the only place torch lives).
             #
             # Docling's RapidOcrModel resolves paths as:
             #   artifacts_path / _model_repo_folder / <relative_path>
             # where _model_repo_folder = "RapidOcr"
-            # and for torch/english the relative paths are:
-            #   torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth   (det)
-            #   torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth  (cls)
-            #   torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth   (rec)
-            #   paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt  (keys)
-            _repo_dir = _docling_artifacts_path / "rapidocr" / "RapidOcr"
-            _det = _repo_dir / "torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth"
-            _cls = _repo_dir / "torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth"
-            _rec = _repo_dir / "torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth"
+            # and for onnxruntime/english the relative paths are:
+            #   onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx  (det)
+            #   onnx/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.onnx  (cls)
+            #   onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx  (rec)
+            #   paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt  (keys, shared)
+            _repo_dir = _docling_artifacts_path / "RapidOcr"
+            _det = _repo_dir / "onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx"
+            _cls = _repo_dir / "onnx/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.onnx"
+            _rec = _repo_dir / "onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx"
             _keys = _repo_dir / "paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt"
 
             # Only provide explicit paths once all model files are on disk.
@@ -102,7 +102,7 @@ def _get_docling_converter():
             if _det.exists() and _cls.exists() and _rec.exists():
                 _ocr_opts = RapidOcrOptions(
                     lang=["english"],
-                    backend="torch",
+                    backend="onnxruntime",
                     det_model_path=str(_det),
                     cls_model_path=str(_cls),
                     rec_model_path=str(_rec),
@@ -113,7 +113,7 @@ def _get_docling_converter():
                 # one-time download into the writable volume.
                 _ocr_opts = RapidOcrOptions(
                     lang=["english"],
-                    backend="torch",
+                    backend="onnxruntime",
                 )
 
             _pdf_pipeline_options = PdfPipelineOptions(
@@ -129,20 +129,22 @@ def _get_docling_converter():
                 ),
             )
             _docling_converter = _DoclingConverter(
+                allowed_formats=[InputFormat.PDF, InputFormat.IMAGE, InputFormat.DOCX],
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_options=_pdf_pipeline_options
                     )
-                }
+                },
             )
 
             emit_event(
                 "extraction.engine.initialized",
+                level=logging.INFO,
                 component="extraction",
                 operation="docling",
-                outcome="success",
             )
         except Exception as exc:
+            logging.error(f"Docling initialization failed: {exc}", exc_info=True)
             emit_event(
                 "extraction.engine.initialized",
                 level=logging.ERROR,

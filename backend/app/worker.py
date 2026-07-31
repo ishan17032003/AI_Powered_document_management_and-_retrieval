@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .bootstrap import prepare_runtime_directories
 from .database import SessionLocal
+from .model_prefetch import prefetch_models
 from .schema_compatibility import assert_schema_compatible
 from .runtime import settings
 from .services.ingestion_worker import run_next_job
@@ -22,6 +23,12 @@ from .services.ingestion_worker import run_next_job
 def run(*, once: bool = False, poll_seconds: float = 1.0) -> int:
     assert_schema_compatible(settings.database_url)
     prepare_runtime_directories(settings)
+    # Download embedding + reranker models into the host-mapped hf_cache
+    # directory on first boot. No-op on subsequent starts when already cached.
+    prefetch_models(
+        embedding_model=settings.embedding_model,
+        reranker_model=settings.reranker_model,
+    )
     owner = f"ingestion-worker-{os.getpid()}-{uuid4().hex[:8]}"
     while True:
         db = SessionLocal()

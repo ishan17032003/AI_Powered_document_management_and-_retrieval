@@ -98,9 +98,18 @@ export default function DocumentDetail() {
         actions={
           <>
             {can("DOWNLOAD") && (
-              <a className="button secondary" href={api.contentUrl(document.id)} target="_blank" rel="noreferrer">
+              <button 
+                className="button secondary" 
+                onClick={async () => {
+                  try {
+                    await api.downloadDocument(document.id, document.versions?.[0]?.filename || "document");
+                  } catch (err: any) {
+                    setError(err.message ?? "Could not download document.");
+                  }
+                }}
+              >
                 <Download size={17} /> Download
-              </a>
+              </button>
             )}
             {can("DELETE") && (
               <button className="button danger-subtle" onClick={() => setConfirmOpen(true)}>

@@ -29,6 +29,12 @@ export interface AdminUser {
   roles: string[];
 }
 
+export interface DocClass {
+  id: number;
+  name: string;
+  parent_id: number | null;
+}
+
 export interface RbacMatrix {
   permissions: string[];
   roles: Record<string, string[]>;
@@ -74,6 +80,7 @@ export interface EffectiveAccess {
 export interface DocSummary {
   id: number;
   title: string;
+  folder_id: number;
   doc_class: string | null;
   class_confidence: number | null;
   status: string;
@@ -82,6 +89,7 @@ export interface DocSummary {
   page_count: number;
   size: number | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DocDetail extends DocSummary {
@@ -410,6 +418,36 @@ export const api = {
     }),
   audit: () => req<AuditRow[]>("/audit?limit=200"),
   contentUrl: (id: number) => `/api/v1/documents/${id}/content`,
+  async downloadDocument(docId: number, filename: string): Promise<void> {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    
+    const res = await fetch(`/api/v1/documents/${docId}/content`, { headers });
+    if (!res.ok) {
+      if (res.status === 401) setToken(null);
+      throw new ApiError(res.status, "Failed to download document");
+    }
+    
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = window.document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    window.document.body.appendChild(a);
+    a.click();
+    window.document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+  listDocClasses: () => req<DocClass[]>("/admin/doc-classes"),
+  reclassifyDocument: (docId: number, classId: number | null, className?: string) =>
+    req<DocSummary>(`/admin/documents/${docId}/class`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        className ? { class_name: className } : { class_id: classId }
+      ),
+    }),
 };
 
 export { ApiError };

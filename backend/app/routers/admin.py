@@ -203,3 +203,64 @@ def release_metrics(
     return reconciliation_monitor.collect_release_metrics(
         db, stale_after_seconds=stale_after_seconds
     )
+
+
+@router.get("/doc-classes", response_model=list[schemas.DocClassOut])
+def list_doc_classes(
+    actor: models.User = Depends(require_global("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    """Return all document taxonomy classes sorted by name.
+
+    Used by the Super Admin class-selector dropdown in the Repository view.
+    """
+    from sqlalchemy import select as _select, asc as _asc
+
+    rows = db.scalars(
+        _select(models.DocClass).order_by(_asc(models.DocClass.name))
+    ).all()
+    return [schemas.DocClassOut.model_validate(row) for row in rows]
+
+
+@router.patch(
+    "/documents/{doc_id}/class",
+    response_model=schemas.DocumentSummary,
+)
+def reclassify_document(
+    doc_id: int = Path(gt=0),
+    payload: schemas.ReclassifyDocument = ...,
+    request: Request = ...,
+    actor: models.User = Depends(require_global("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    """Manually reassign the document class (Super Admin only).
+
+    Accepts either an existing ``class_id`` or a free-text ``class_name``
+    (which is created on the fly if it does not yet exist).  When the MinIO
+    storage backend is active the binary is moved to the new class bucket.
+    """
+    from ..services import document_service
+    from ..services.exceptions import NotFoundError, PermissionDeniedError
+    from ..utils.request_context import get_request_context
+    from ..repositories import document_repository
+
+    # Resolve class_name → class_id when only a name is provided.
+    resolved_class_id = payload.class_id
+    if resolved_class_id is None and payload.class_name:
+        cls = document_repository.get_or_create_class(db, payload.class_name)
+        db.flush()
+        resolved_class_id = cls.id
+
+    try:
+        return document_service.reclassify_document(
+            db,
+            actor,
+            doc_id,
+            resolved_class_id,
+            context=get_request_context(request),
+        )
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+

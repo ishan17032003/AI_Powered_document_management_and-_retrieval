@@ -147,6 +147,12 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
             class_name, confidence = classification.classify(extraction.text)
             document.doc_class = document_repository.get_or_create_class(db, class_name)
             document.class_confidence = confidence
+            if settings.storage_backend == "minio":
+                try:
+                    new_key = object_store.move_to_class(version.file_key, class_name)
+                    version.file_key = new_key
+                except Exception:
+                    pass
             version.extraction_method = extraction.status[:20]
             version.extractor_name = (
                 extraction.extractor_name[:40]

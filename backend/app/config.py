@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/docvault"
     storage_dir: Path = BASE_DIR / "storage"
 
+    # ── Object storage backend ───────────────────────────────────────────────
+    # Set to "minio" to route all document binaries through MinIO.
+    # "filesystem" retains the original local-path implementation.
+    storage_backend: Literal["filesystem", "minio"] = "filesystem"
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_secure: bool = False
+    # All per-class buckets share this prefix: <prefix>-<classname>
+    minio_bucket_prefix: str = "docvault"
+
     # Client address forwarding is disabled by default.  When an operator
     # explicitly lists the network(s) occupied by the ingress proxy, request
     # context may consume a bounded X-Forwarded-For chain from that proxy.

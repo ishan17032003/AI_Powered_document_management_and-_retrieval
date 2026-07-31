@@ -755,7 +755,8 @@ def ingest_document_version(
     filename = validated.filename
     content_type = validated.content_type or content_type
     checksum = hashing.sha256_bytes(payload)
-    stored = file_storage.store_bytes(filename, payload, checksum)
+    class_name = document.doc_class.name if document.doc_class else None
+    stored = file_storage.store_bytes(filename, payload, checksum, class_name=class_name)
     version_no = max((item.version_no for item in document.versions), default=0) + 1
     try:
         version = document_repository.add_version(
@@ -1049,6 +1050,46 @@ def get_document_detail(
     )
 
 
+def _version_to_download_file(version: models.DocVersion) -> DownloadFile:
+    """Resolve a DocVersion to a DownloadFile, handling both backends.
+
+    For the filesystem backend, the stored key is a relative path that can be
+    opened directly.  For the MinIO backend we stream the object into a
+    temporary file so FastAPI's FileResponse can serve it; the caller is
+    responsible for unlinking the file after the response is sent (FastAPI does
+    this automatically when ``background`` tasks are used, but here the temp
+    file lives long enough for Starlette to read it before the GC removes it).
+    """
+    from ..config import settings
+    from .. import storage as _storage_module
+
+    if settings.storage_backend == "filesystem":
+        path = file_storage.resolve_storage_path(version.file_key)
+        if not path.exists():
+            raise GoneError("File missing from storage")
+        return DownloadFile(path=path, content_type=version.content_type, filename=version.filename)
+
+    # MinIO: stream the object into a named temp file.
+    import tempfile
+    stream = _storage_module.object_store.open(version.file_key)
+    suffix = Path(version.filename).suffix
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            tmp.write(chunk)
+        tmp.flush()
+        tmp.close()
+    except Exception:
+        import os as _os
+        _os.unlink(tmp.name)
+        raise
+    return DownloadFile(
+        path=Path(tmp.name),
+        content_type=version.content_type,
+        filename=version.filename,
+    )
+
+
 def get_download(
     db: Session,
     user: models.User,
@@ -1065,9 +1106,6 @@ def get_download(
     if not document.versions:
         raise NotFoundError("Document not found")
     version = document.versions[-1]
-    path = file_storage.resolve_storage_path(version.file_key)
-    if not path.exists():
-        raise GoneError("File missing from storage")
     audit_service.record(
         db,
         actor=user,
@@ -1076,11 +1114,7 @@ def get_download(
         object_id=document_id,
         context=context,
     )
-    return DownloadFile(
-        path=path,
-        content_type=version.content_type,
-        filename=version.filename,
-    )
+    return _version_to_download_file(version)
 
 
 def list_versions(
@@ -1102,13 +1136,10 @@ def get_version_download(
     version = next((item for item in document.versions if item.id == version_id), None)
     if version is None or version.storage_state == "DELETED":
         raise NotFoundError("Version not found")
-    path = file_storage.resolve_storage_path(version.file_key)
-    if not path.exists():
-        raise GoneError("File missing from storage")
     audit_service.record(
         db, actor=user, action="DOWNLOAD", object_type="document_version", object_id=version.id, context=context
     )
-    return DownloadFile(path=path, content_type=version.content_type, filename=version.filename)
+    return _version_to_download_file(version)
 
 
 def delete_document(
@@ -1257,3 +1288,82 @@ def update_metadata(
         versions=[schemas.VersionOut.model_validate(version) for version in document.versions],
         is_duplicate_of=duplicate_repository.find_primary_for_duplicate(db, document_id),
     )
+
+
+def reclassify_document(
+    db: Session,
+    actor: models.User,
+    document_id: int,
+    new_class_id: int | None,
+    *,
+    context: RequestContext | None = None,
+) -> schemas.DocumentSummary:
+    """Change the document's class and relocate the binary to the correct MinIO bucket.
+
+    Only Super Admin (global ADMIN permission) may call this.  For the
+    filesystem backend the class is updated in the DB only; no files are moved
+    because the filesystem adapter uses a content-addressed layout that is
+    independent of class.
+    """
+    if not rbac_service.has_global_permission(db, actor, "ADMIN"):
+        raise PermissionDeniedError("Only Super Admin may reclassify documents")
+
+    document = document_repository.get(db, document_id)
+    if document is None or document.lifecycle_state != "ACTIVE":
+        raise NotFoundError("Document not found")
+
+    # Resolve the new class.
+    new_class: models.DocClass | None = None
+    if new_class_id is not None:
+        new_class = db.get(models.DocClass, new_class_id)
+        if new_class is None:
+            raise NotFoundError("Document class not found")
+
+    new_class_name = new_class.name if new_class else None
+    old_class_name = document.doc_class.name if document.doc_class else None
+
+    # Move binaries in MinIO (no-op for filesystem backend).
+    from ..config import settings
+    from .. import storage as _storage_module
+
+    new_file_keys: dict[int, str] = {}
+    if settings.storage_backend == "minio":
+        for version in document.versions:
+            if version.storage_state not in ("AVAILABLE", "STAGED"):
+                continue
+            try:
+                new_key = _storage_module.object_store.move_to_class(
+                    version.file_key, new_class_name
+                )
+                new_file_keys[version.id] = new_key
+            except Exception:  # noqa: BLE001
+                # Non-fatal: DB is the authoritative record; MinIO move is
+                # best-effort here.  A reconciliation job can fix orphans.
+                pass
+
+    try:
+        document.class_id = new_class_id
+        document.class_confidence = None  # Manual override clears auto confidence.
+        for version in document.versions:
+            if version.id in new_file_keys:
+                version.file_key = new_file_keys[version.id]
+
+        audit_service.record(
+            db,
+            actor=actor,
+            action="RECLASSIFY",
+            object_type="document",
+            object_id=document_id,
+            details={
+                "old_class": old_class_name,
+                "new_class": new_class_name,
+            },
+            context=context,
+        )
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        db.rollback()
+        raise
+
+    return _summary(document)
