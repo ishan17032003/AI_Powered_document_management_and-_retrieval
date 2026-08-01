@@ -77,6 +77,24 @@ export interface EffectiveAccess {
   ancestry: Array<{ scope_type: string; scope_id: number | null }>;
 }
 
+export interface UserDocRule {
+  rule_id: number;
+  doc_id: number;
+  doc_title: string;
+  doc_class: string | null;
+  effect: "ALLOW" | "DENY";
+  permission: string;
+  reason: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AllDocRule extends UserDocRule {
+  user_id: number;
+  user_name: string;
+  user_username: string;
+}
+
 export interface DocSummary {
   id: number;
   title: string;
@@ -337,6 +355,10 @@ export const api = {
     req<AccessRule>(`/access/rules/${ruleId}`, { method: "DELETE" }),
   explainAccess: (userId: number, scopeId: number) =>
     req<EffectiveAccess>(`/access/effective?user_id=${userId}&permission=VIEW&scope=DOC&scope_id=${scopeId}`),
+  listUserDocRules: (userId: number) =>
+    req<UserDocRule[]>(`/access/user/${userId}/doc-rules`),
+  listAllDocRules: () =>
+    req<AllDocRule[]>(`/access/all-doc-rules`),
   stats: () => req<Stats>("/admin/stats"),
   ragStatus: () => req<RagStatus>("/status"),
   listDocuments: () => req<DocSummary[]>("/documents"),

@@ -466,3 +466,43 @@ class DocClassOut(BaseModel):
     name: str
     parent_id: int | None = None
 
+
+# ── User-centric document access view (Admin/Super Admin) ────────────────────
+
+class UserDocRuleOut(BaseModel):
+    """One access_rule row surfaced from a user's perspective.
+
+    Includes revoked (is_active=False) rules so Super Admin can see
+    the full history. All permissions (VIEW, DOWNLOAD, …) are included.
+    """
+
+    rule_id: int
+    doc_id: int
+    doc_title: str
+    doc_class: str | None
+    effect: str          # ALLOW | DENY
+    permission: str      # VIEW | DOWNLOAD | DELETE | …
+    reason: str | None
+    is_active: bool
+    created_at: datetime
+
+
+class AllDocRuleOut(BaseModel):
+    """Flat projection of a DOC-scoped access rule with user identity.
+
+    Used by the admin access-control matrix view to display every
+    user → document rule in one table.
+    """
+
+    rule_id: int
+    user_id: int
+    user_name: str
+    user_username: str
+    doc_id: int
+    doc_title: str
+    doc_class: str | None
+    effect: str
+    permission: str
+    reason: str | None
+    is_active: bool
+    created_at: datetime
