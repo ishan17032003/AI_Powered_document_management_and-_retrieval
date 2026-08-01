@@ -307,7 +307,9 @@ def provision() -> LanceDbRetrievalStore:
         settings.lancedb_uri,
         table_name=settings.lancedb_table_name,
         vector_dimensions=(
-            settings.qdrant_vector_size if settings.enable_embeddings else None
+            settings.qdrant_vector_size
+            if (settings.enable_embeddings or settings.lancedb_text_vectors_enabled)
+            else None
         ),
         lock_timeout_seconds=settings.lancedb_lock_timeout_seconds,
     )

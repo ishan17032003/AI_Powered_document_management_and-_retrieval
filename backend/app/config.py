@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # accidentally enabled in their environment.
     lancedb_writer_enabled: bool = False
     lancedb_lock_timeout_seconds: float = Field(default=5.0, ge=0.05, le=300.0)
+    # Store BGE-M3 dense vectors on text_chunks rows and serve text retrieval
+    # as a BM25+vector hybrid with cross-encoder reranking — no Qdrant involved.
+    lancedb_text_vectors_enabled: bool = False
 
     # Text-to-visual retrieval uses the authoritative visual asset/extraction
     # records and exact SQL authorization.  The lexical lane is deliberately
