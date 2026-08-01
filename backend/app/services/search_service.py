@@ -17,9 +17,11 @@ from html.parser import HTMLParser
 
 from sqlalchemy.orm import Session
 
-from ..config import settings
+from ..chunking import chunk_text
+from ..config import RetrievalReadMode, settings
 from ..observability import emit_event
 from ..repositories import search_repository
+from ..retrieval_store import RetrievalChunk, RetrievalStoreError
 from ..utils.request_context import bound_request_context, worker_context
 from . import lancedb_service, retrieval_read_router
 
@@ -270,18 +272,66 @@ def _get_lancedb_reader():
     return lancedb_service.reader_store()
 
 
+def index_lancedb_chunks(
+    document_id: int,
+    version_id: int | str,
+    title: str,
+    content: str,
+) -> bool:
+    """Best-effort chunk upsert into the LanceDB text lane (single writer)."""
+    if not settings.lancedb_writer_enabled:
+        return False
+    text_value = (content or "").strip()
+    if not text_value:
+        return False
+    try:
+        chunks = chunk_text(document_id, version_id, text_value)
+        store = lancedb_service.writer_store()
+        store.upsert_chunks(
+            str(version_id),
+            [
+                RetrievalChunk(
+                    chunk_id=chunk.chunk_id,
+                    document_id=document_id,
+                    version_id=str(version_id),
+                    chunk_no=chunk.chunk_no,
+                    text=chunk.text,
+                    metadata={
+                        "title": title,
+                        "page_start": chunk.page_start,
+                        "page_end": chunk.page_end,
+                    },
+                )
+                for chunk in chunks
+            ],
+        )
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "LanceDB text chunk indexing degraded for document %s", document_id
+        )
+        return False
+
+
 def search(
     db: Session, query: str, allowed_ids: set[int] | None, limit: int = 50
 ) -> list[dict]:
     """Route retrieval according to the reversible serving-mode flag."""
-    return retrieval_read_router.route_search(
-        mode=settings.retrieval_read_mode,
-        query=query,
-        allowed_ids=allowed_ids,
-        limit=limit,
-        current_search=lambda: _search_current(db, query, allowed_ids, limit),
-        lancedb_store=_get_lancedb_reader,
-    )
+    try:
+        return retrieval_read_router.route_search(
+            mode=settings.retrieval_read_mode,
+            query=query,
+            allowed_ids=allowed_ids,
+            limit=limit,
+            current_search=lambda: _search_current(db, query, allowed_ids, limit),
+            lancedb_store=_get_lancedb_reader,
+        )
+    except RetrievalStoreError:
+        # LanceDB-primary must degrade to the current lane (and ultimately to
+        # the Postgres OCR passages in RAG) instead of failing the request.
+        if RetrievalReadMode(settings.retrieval_read_mode) is RetrievalReadMode.LANCEDB_PRIMARY:
+            return _search_current(db, query, allowed_ids, limit)
+        raise
 
 
 def search_with_documents(

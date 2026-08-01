@@ -38,7 +38,9 @@ class RetrievalReadMode(StrEnum):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="DOCVAULT_",
-        env_file=".env",
+        # Single shared env file at the repository root (also read by Docker
+        # Compose); a backend-local .env still wins if one exists.
+        env_file=(str(BASE_DIR.parent / ".env"), ".env"),
         extra="ignore",
         hide_input_in_errors=True,
     )
@@ -171,8 +173,11 @@ class Settings(BaseSettings):
     #   "ollama"    -> local open-weight model only (offline, India-resident)
     #   "anthropic" -> Claude only
     #   "none"      -> extractive passages only
-    llm_provider: str = "none"
+    llm_provider: str = "vllm"
     allow_external_llm: bool = False
+    # Development-only escape hatch: permit plain-HTTP egress to an allowlisted
+    # external provider host. Keep False anywhere document content matters.
+    allow_insecure_llm_http: bool = False
     llm_allowed_hosts: list[str] = []
     # Context window for answer generation. 5 passages × 1800 chars each = up to 9 000 chars.
     rag_max_context_chars: int = 9000

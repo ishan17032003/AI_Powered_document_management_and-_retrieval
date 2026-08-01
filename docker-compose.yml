@@ -72,7 +72,10 @@ services:
       DOCVAULT_RAG_MODEL: "${DOCVAULT_RAG_MODEL:-claude-opus-4-8}"
       # ── RAG pipeline (local default uses the SQLite FTS5 fallback) ──
       DOCVAULT_USE_QDRANT: "${DOCVAULT_USE_QDRANT:-false}"
-      DOCVAULT_QDRANT_URL: "${DOCVAULT_QDRANT_URL:-}"
+      # In-network service DNS; the host-facing URL in .env only applies to
+      # non-Docker runs (the environment block overrides env_file here).
+      DOCVAULT_QDRANT_URL: "http://qdrant:6333"
+      DOCVAULT_LANCEDB_URI: "/data/lancedb"
       DOCVAULT_QDRANT_COLLECTION: "${DOCVAULT_QDRANT_COLLECTION:-docvault}"
       DOCVAULT_EMBEDDING_MODEL: "${DOCVAULT_EMBEDDING_MODEL:-BAAI/bge-m3}"
       DOCVAULT_RERANKER_MODEL: "${DOCVAULT_RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}"
@@ -100,6 +103,7 @@ services:
       DOCVAULT_MINIO_BUCKET_PREFIX: "${DOCVAULT_MINIO_BUCKET_PREFIX:-docvault}"
     volumes:
       - docvault_db:/data          # SQLite DB + storage + OKF bundle
+      - lancedb_data:/data/lancedb # LanceDB tables on the host (visual semantic + shadow lanes)
       - hf_cache:/hf_cache         # HuggingFace model weights (BGE-M3, reranker) — persisted across restarts
       - ./backend/app:/app/app:ro  # Hot reload for backend source code
     secrets:
@@ -142,7 +146,8 @@ services:
       DOCVAULT_STORAGE_DIR: "/data/storage"
       DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"
       DOCVAULT_USE_QDRANT: "${DOCVAULT_USE_QDRANT:-false}"
-      DOCVAULT_QDRANT_URL: "${DOCVAULT_QDRANT_URL:-}"
+      DOCVAULT_QDRANT_URL: "http://qdrant:6333"
+      DOCVAULT_LANCEDB_URI: "/data/lancedb"
       DOCVAULT_INGESTION_WORKER_COUNT: "${DOCVAULT_INGESTION_WORKER_COUNT:-1}"
       # ── MinIO object storage ──
       DOCVAULT_STORAGE_BACKEND: "${DOCVAULT_STORAGE_BACKEND:-minio}"
@@ -162,6 +167,7 @@ services:
     entrypoint: ["python", "-m", "app.worker"]
     volumes:
       - docvault_db:/data
+      - lancedb_data:/data/lancedb
       - hf_cache:/hf_cache
       - ./backend/app:/app/app:ro  # Mount source code for dev
     secrets:
@@ -338,6 +344,13 @@ volumes:
       type: none
       o: bind
       device: ${HF_CACHE_HOST_PATH:-/home/ishan-prasher/models/hf_cache}
+  lancedb_data:
+    # Host bind-mount so LanceDB tables are inspectable/backed up directly.
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LANCEDB_HOST_PATH:-C:/Users/Radius/Downloads/doc/ai_doc_vault/lancedb}
   qdrant_data:
     name: ddms_qdrant_data
     driver: local
