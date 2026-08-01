@@ -35,12 +35,19 @@ class RetrievalReadMode(StrEnum):
     LANCEDB_PRIMARY = "lancedb_primary"
 
 
+# Docker secrets mount (compose `secrets:` block). File names map to settings
+# fields with the env prefix, e.g. /run/secrets/docvault_secret_key ->
+# secret_key. Absent outside containers, where env/.env remain the sources.
+_SECRETS_DIR = "/run/secrets" if Path("/run/secrets").is_dir() else None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="DOCVAULT_",
         # Single shared env file at the repository root (also read by Docker
         # Compose); a backend-local .env still wins if one exists.
         env_file=(str(BASE_DIR.parent / ".env"), ".env"),
+        secrets_dir=_SECRETS_DIR,
         extra="ignore",
         hide_input_in_errors=True,
     )
