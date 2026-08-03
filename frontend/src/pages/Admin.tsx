@@ -1,30 +1,58 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, KeyRound, Lock, ShieldCheck, UserPlus, Users, X } from "lucide-react";
-import { api, AccessRule, AdminUser, DocSummary, EffectiveAccess, RbacMatrix } from "../api";
+import {
+  Check,
+  FileText,
+  KeyRound,
+  Lock,
+  Search,
+  ShieldCheck,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  api,
+  AccessRule,
+  AdminUser,
+  AllDocRule,
+  DocSummary,
+  EffectiveAccess,
+  RbacMatrix,
+} from "../api";
 import { useAuth } from "../auth";
 import { PageHeader, SectionCard, StatusPill, StatusTone } from "../components/ui";
 
 function toneForStatus(status: string): StatusTone {
-  return status === "active" || status === "ALLOW" ? "success" : status === "suspended" || status === "DENY" ? "danger" : "neutral";
+  return status === "active" || status === "ALLOW"
+    ? "success"
+    : status === "suspended" || status === "DENY"
+    ? "danger"
+    : "neutral";
 }
 
 export default function Admin() {
-  const { can } = useAuth();
+  const { can, user: me } = useAuth();
+  const isSuperAdmin = !!me?.roles.includes("Super Admin");
+
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [documents, setDocuments] = useState<DocSummary[]>([]);
   const [matrix, setMatrix] = useState<RbacMatrix | null>(null);
+
+  // Access-control matrix (all users × all docs)
+  const [allRules, setAllRules] = useState<AllDocRule[]>([]);
+  const [matrixFilter, setMatrixFilter] = useState("");
+  const [matrixLoading, setMatrixLoading] = useState(false);
+
+  // Legacy doc-centric grant panel
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [rules, setRules] = useState<AccessRule[]>([]);
   const [effective, setEffective] = useState<EffectiveAccess | null>(null);
+
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [createForm, setCreateForm] = useState({
-    username: "",
-    name: "",
-    email: "",
-    password: "",
-    role: "Viewer",
+    username: "", name: "", email: "", password: "", role: "Viewer",
   });
   const [accessForm, setAccessForm] = useState({ effect: "ALLOW" as "ALLOW" | "DENY", reason: "" });
 
@@ -32,13 +60,41 @@ export default function Admin() {
   const selectedUser = users.find((item) => item.id === Number(selectedUserId));
   const selectedDocument = documents.find((item) => item.id === Number(selectedDocumentId));
 
+  // Filtered access matrix rows
+  const filteredRules = useMemo(() => {
+    const q = matrixFilter.toLowerCase().trim();
+    if (!q) return allRules;
+    return allRules.filter(
+      (r) =>
+        r.user_name.toLowerCase().includes(q) ||
+        r.user_username.toLowerCase().includes(q) ||
+        r.doc_title.toLowerCase().includes(q) ||
+        (r.doc_class ?? "").toLowerCase().includes(q) ||
+        r.permission.toLowerCase().includes(q) ||
+        r.effect.toLowerCase().includes(q)
+    );
+  }, [allRules, matrixFilter]);
+
+  async function loadAllRules() {
+    setMatrixLoading(true);
+    try {
+      setAllRules(await api.listAllDocRules());
+    } catch (err: any) {
+      setError(err.message || "Could not load access matrix.");
+    } finally {
+      setMatrixLoading(false);
+    }
+  }
+
   async function loadAccess(documentId = selectedDocumentId) {
     if (!documentId) return;
     setEffective(null);
     try {
       const nextRules = await api.listAccessRules("DOC", Number(documentId));
-      setRules(nextRules);
-      if (selectedUserId) setEffective(await api.explainAccess(Number(selectedUserId), Number(documentId)));
+      // Only show active rules in the legacy panel
+      setRules(nextRules.filter((r) => r.is_active !== false));
+      if (selectedUserId)
+        setEffective(await api.explainAccess(Number(selectedUserId), Number(documentId)));
     } catch (err: any) {
       setError(err.message || "Access rules could not be loaded.");
     }
@@ -46,14 +102,15 @@ export default function Admin() {
 
   useEffect(() => {
     if (!can("ADMIN")) return;
-    Promise.all([api.adminUsers(), api.rbacMatrix(), api.listDocuments()])
-      .then(([nextUsers, nextMatrix, nextDocuments]) => {
+    Promise.all([api.adminUsers(), api.rbacMatrix(), api.listDocuments(), api.listAllDocRules()])
+      .then(([nextUsers, nextMatrix, nextDocuments, nextRules]) => {
         setUsers(nextUsers);
         setMatrix(nextMatrix);
         setDocuments(nextDocuments);
+        setAllRules(nextRules);
         if (nextUsers[0]) setSelectedUserId(String(nextUsers[0].id));
         if (nextDocuments[0]) setSelectedDocumentId(String(nextDocuments[0].id));
-        if (nextMatrix.roles.Viewer) setCreateForm((current) => ({ ...current, role: "Viewer" }));
+        if (nextMatrix.roles.Viewer) setCreateForm((c) => ({ ...c, role: "Viewer" }));
       })
       .catch((err: any) => setError(err.message || "RBAC data could not be loaded."));
   }, [can]);
@@ -68,7 +125,7 @@ export default function Admin() {
     setError("");
     try {
       const created = await api.createUser(createForm);
-      setUsers((current) => [...current, created].sort((a, b) => a.username.localeCompare(b.username)));
+      setUsers((c) => [...c, created].sort((a, b) => a.username.localeCompare(b.username)));
       setSelectedUserId(String(created.id));
       setCreateForm({ username: "", name: "", email: "", password: "", role: roles[0] || "Viewer" });
     } catch (err: any) {
@@ -84,7 +141,7 @@ export default function Admin() {
     setError("");
     try {
       const updated = await api.assignRole(userId, role);
-      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setUsers((c) => c.map((item) => (item.id === updated.id ? updated : item)));
     } catch (err: any) {
       setError(err.message || "Role could not be assigned.");
     } finally {
@@ -98,7 +155,7 @@ export default function Admin() {
     setError("");
     try {
       const updated = await api.setUserStatus(item.id, nextStatus);
-      setUsers((current) => current.map((user) => user.id === updated.id ? updated : user));
+      setUsers((c) => c.map((u) => (u.id === updated.id ? updated : u)));
     } catch (err: any) {
       setError(err.message || "User status could not be changed.");
     } finally {
@@ -120,8 +177,9 @@ export default function Admin() {
         inherits: false,
         reason: accessForm.reason || "Administrator-managed file access",
       });
-      setAccessForm((current) => ({ ...current, reason: "" }));
+      setAccessForm((c) => ({ ...c, reason: "" }));
       await loadAccess();
+      await loadAllRules();
     } catch (err: any) {
       setError(err.message || "Access rule could not be saved.");
     } finally {
@@ -134,7 +192,25 @@ export default function Admin() {
     setError("");
     try {
       await api.revokeAccessRule(rule.id);
-      await loadAccess();
+      // Remove immediately from local state
+      setRules((prev) => prev.filter((r) => r.id !== rule.id));
+      // Also refresh the matrix
+      void loadAllRules();
+    } catch (err: any) {
+      setError(err.message || "Access rule could not be revoked.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // Revoke from the access matrix — removes row immediately from UI
+  async function revokeMatrixRule(ruleId: number) {
+    setBusy(`mx-${ruleId}`);
+    setError("");
+    try {
+      await api.revokeAccessRule(ruleId);
+      // Remove immediately from local state so the row disappears
+      setAllRules((prev) => prev.filter((r) => r.rule_id !== ruleId));
     } catch (err: any) {
       setError(err.message || "Access rule could not be revoked.");
     } finally {
@@ -145,6 +221,17 @@ export default function Admin() {
   if (!can("ADMIN")) {
     return <div className="notice is-danger">Administrator permission is required to manage users and file access.</div>;
   }
+
+  // Group filtered rules by user for the matrix display
+  const rulesByUser = useMemo(() => {
+    const map = new Map<string, { userName: string; username: string; userId: number; rules: AllDocRule[] }>();
+    filteredRules.forEach((r) => {
+      const key = String(r.user_id);
+      if (!map.has(key)) map.set(key, { userName: r.user_name, username: r.user_username, userId: r.user_id, rules: [] });
+      map.get(key)!.rules.push(r);
+    });
+    return [...map.values()];
+  }, [filteredRules]);
 
   return (
     <div className="admin-page">
@@ -157,7 +244,107 @@ export default function Admin() {
 
       {error && <div className="notice is-danger" role="alert">{error}</div>}
 
-      <div className="admin-grid">
+      {/* ── ACCESS CONTROL MATRIX ─────────────────────────────────────────────── */}
+      <SectionCard className="acm-card">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">All users · all documents</span>
+            <h2><Lock size={19} /> Access control matrix</h2>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span className="section-count">{filteredRules.length}</span>
+            <div className="acm-search-wrap">
+              <Search size={13} />
+              <input
+                className="acm-search"
+                placeholder="Filter by user, document, permission…"
+                value={matrixFilter}
+                onChange={(e) => setMatrixFilter(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {matrixLoading ? (
+          <p className="admin-empty">Loading…</p>
+        ) : allRules.length === 0 ? (
+          <p className="admin-empty">No document-level access rules exist yet. Use "Grant file access" below to add one.</p>
+        ) : rulesByUser.length === 0 ? (
+          <p className="admin-empty">No rules match your filter.</p>
+        ) : (
+          <div className="acm-table">
+            <div className="acm-header">
+              <span>Document</span>
+              <span>Class</span>
+              <span>Permission</span>
+              <span>Effect</span>
+              <span>Reason</span>
+              <span>Date</span>
+              {isSuperAdmin && <span />}
+            </div>
+
+            {rulesByUser.map(({ userName, username, userId, rules: userRules }) => (
+              <div key={userId} className="acm-user-group">
+                {/* User header row */}
+                <div className="acm-user-header">
+                  <span className="avatar is-small">{userName.slice(0, 2).toUpperCase()}</span>
+                  <strong>{userName}</strong>
+                  <span className="acm-username">{username}</span>
+                  <span className="acm-rule-count">{userRules.length} rule{userRules.length !== 1 ? "s" : ""}</span>
+                </div>
+
+                {/* Rule rows for this user */}
+                {userRules.map((rule) => (
+                  <div
+                    key={rule.rule_id}
+                    className={`acm-row${!rule.is_active ? " is-revoked" : ""}`}
+                  >
+                    <span className="acm-doc">
+                      <FileText size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
+                      <span>{rule.doc_title}</span>
+                    </span>
+                    <span className="acm-class">
+                      {rule.doc_class ?? <em style={{ opacity: 0.4 }}>—</em>}
+                    </span>
+                    <span>
+                      <span className="perm-badge">{rule.permission}</span>
+                    </span>
+                    <span>
+                      <StatusPill tone={toneForStatus(rule.effect)}>{rule.effect}</StatusPill>
+                    </span>
+                    <span className="acm-reason">
+                      {rule.reason || <em style={{ opacity: 0.35 }}>—</em>}
+                    </span>
+                    <span className="acm-date">
+                      {new Date(rule.created_at).toLocaleDateString()}
+                    </span>
+                    {isSuperAdmin && (
+                      <span>
+                        {rule.is_active ? (
+                          <button
+                            className="icon-button danger-on-hover"
+                            onClick={() => void revokeMatrixRule(rule.rule_id)}
+                            aria-label={`Revoke ${rule.user_name}'s access to ${rule.doc_title}`}
+                            disabled={busy === `mx-${rule.rule_id}`}
+                            title="Revoke access"
+                          >
+                            <X size={13} />
+                          </button>
+                        ) : (
+                          <span className="acm-revoked-badge">Revoked</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      <div className="admin-grid" style={{ marginTop: 12 }}>
+        {/* ── Users panel ────────────────────────────────────────────── */}
         <SectionCard className="admin-users-card">
           <div className="section-heading">
             <div>
@@ -169,11 +356,11 @@ export default function Admin() {
 
           <form className="admin-create-form" onSubmit={createUser}>
             <div className="admin-form-grid">
-              <label className="field"><span>Username</span><input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} required minLength={3} /></label>
-              <label className="field"><span>Name</span><input value={createForm.name} onChange={(event) => setCreateForm({ ...createForm, name: event.target.value })} required /></label>
-              <label className="field"><span>Email</span><input type="email" value={createForm.email} onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })} required /></label>
-              <label className="field"><span>Temporary password</span><input type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} required minLength={16} placeholder="At least 16 characters" /></label>
-              <label className="field"><span>Initial role</span><select value={createForm.role} onChange={(event) => setCreateForm({ ...createForm, role: event.target.value })}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>
+              <label className="field"><span>Username</span><input value={createForm.username} onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })} required minLength={3} /></label>
+              <label className="field"><span>Name</span><input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} required /></label>
+              <label className="field"><span>Email</span><input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required /></label>
+              <label className="field"><span>Temporary password</span><input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required minLength={16} placeholder="At least 16 characters" /></label>
+              <label className="field"><span>Initial role</span><select value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>
             </div>
             <button className="button primary" disabled={busy === "create"}><UserPlus size={16} />{busy === "create" ? "Creating…" : "Create user"}</button>
           </form>
@@ -182,10 +369,14 @@ export default function Admin() {
             {users.map((item) => (
               <div className="admin-user-row" key={item.id}>
                 <span className="avatar is-small">{item.name.slice(0, 2).toUpperCase()}</span>
-                <span className="admin-user-copy"><strong>{item.name}</strong><small>{item.username} · {item.email}</small><span className="role-list">{item.roles.join(" · ") || "No role"}</span></span>
+                <span className="admin-user-copy">
+                  <strong>{item.name}</strong>
+                  <small>{item.username} · {item.email}</small>
+                  <span className="role-list">{item.roles.join(" · ") || "No role"}</span>
+                </span>
                 <span className="admin-user-actions">
                   <StatusPill tone={toneForStatus(item.status)}>{item.status}</StatusPill>
-                  <select aria-label={`Assign an additional role to ${item.name}`} value="" onChange={(event) => void assignRole(item.id, event.target.value)} disabled={busy === `role-${item.id}`}>
+                  <select aria-label={`Assign role to ${item.name}`} value="" onChange={(e) => void assignRole(item.id, e.target.value)} disabled={busy === `role-${item.id}`}>
                     <option value="">Assign role…</option>
                     {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                   </select>
@@ -196,7 +387,7 @@ export default function Admin() {
               </div>
             ))}
           </div>
-          <p className="admin-help">Role assignment is additive. Use explicit access rules below for file visibility; a role alone does not grant a document.</p>
+          <p className="admin-help">Role assignment is additive. Use "Grant file access" below for document-level visibility.</p>
           {matrix && (
             <details className="role-matrix">
               <summary>Role capability guide</summary>
@@ -209,42 +400,59 @@ export default function Admin() {
           )}
         </SectionCard>
 
+        {/* ── Grant file access ────────────────────────────────────────── */}
         <SectionCard className="admin-access-card">
           <div className="section-heading">
             <div>
               <span className="section-kicker">Resource authorization</span>
-              <h2><Lock size={19} /> File visibility</h2>
+              <h2><Lock size={19} /> Grant file access</h2>
             </div>
-            <StatusPill tone="info">VIEW</StatusPill>
+            <StatusPill tone="info">DOC scope</StatusPill>
           </div>
 
           <div className="admin-form-grid access-select-grid">
-            <label className="field"><span>User</span><select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>{users.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.username})</option>)}</select></label>
-            <label className="field"><span>File</span><select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)}>{documents.map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.title}</option>)}</select></label>
+            <label className="field"><span>User</span><select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>{users.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.username})</option>)}</select></label>
+            <label className="field"><span>File</span><select value={selectedDocumentId} onChange={(e) => setSelectedDocumentId(e.target.value)}>{documents.map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.title}</option>)}</select></label>
           </div>
 
           <form className="access-grant-form" onSubmit={grantAccess}>
-            <label className="field"><span>Decision</span><select value={accessForm.effect} onChange={(event) => setAccessForm({ ...accessForm, effect: event.target.value as "ALLOW" | "DENY" })}><option value="ALLOW">Allow view</option><option value="DENY">Deny view</option></select></label>
-            <label className="field"><span>Reason (optional)</span><input value={accessForm.reason} onChange={(event) => setAccessForm({ ...accessForm, reason: event.target.value })} placeholder="Why this file is shared" maxLength={1000} /></label>
+            <label className="field"><span>Decision</span><select value={accessForm.effect} onChange={(e) => setAccessForm({ ...accessForm, effect: e.target.value as "ALLOW" | "DENY" })}><option value="ALLOW">Allow view</option><option value="DENY">Deny view</option></select></label>
+            <label className="field"><span>Reason (optional)</span><input value={accessForm.reason} onChange={(e) => setAccessForm({ ...accessForm, reason: e.target.value })} placeholder="Why this file is shared" maxLength={1000} /></label>
             <button className="button primary" disabled={!selectedUser || !selectedDocument || busy === "access"}><KeyRound size={16} />{busy === "access" ? "Saving…" : "Save access"}</button>
           </form>
 
           {selectedUser && selectedDocument && effective && (
             <div className={`effective-access ${effective.allowed ? "is-allowed" : "is-denied"}`}>
               {effective.allowed ? <Check size={17} /> : <X size={17} />}
-              <span><strong>{selectedUser.name} {effective.allowed ? "can see" : "cannot see"} this file</strong><small>{effective.reason_code.replaceAll("_", " ").toLowerCase()} · policy revision {effective.policy_version}</small></span>
+              <span>
+                <strong>{selectedUser.name} {effective.allowed ? "can see" : "cannot see"} this file</strong>
+                <small>{effective.reason_code.replaceAll("_", " ").toLowerCase()} · policy revision {effective.policy_version}</small>
+              </span>
             </div>
           )}
 
-          <div className="access-rules-heading"><span>Rules on {selectedDocument ? `#${selectedDocument.id} · ${selectedDocument.title}` : "selected file"}</span><small>{rules.length} rule{rules.length === 1 ? "" : "s"}</small></div>
+          <div className="access-rules-heading">
+            <span>Active rules on {selectedDocument ? `#${selectedDocument.id} · ${selectedDocument.title}` : "selected file"}</span>
+            <small>{rules.length} rule{rules.length === 1 ? "" : "s"}</small>
+          </div>
           <div className="access-rule-list">
             {rules.length ? rules.map((rule) => (
               <div className="access-rule-row" key={rule.id}>
                 <StatusPill tone={toneForStatus(rule.effect)}>{rule.effect}</StatusPill>
-                <span><strong>{rule.principal_type} #{rule.principal_id}</strong><small>{rule.permission} · {rule.reason || "No reason recorded"}</small></span>
-                <button className="icon-button danger-on-hover" onClick={() => void revokeRule(rule)} aria-label={`Revoke rule ${rule.id}`} disabled={busy === `revoke-${rule.id}`}><X size={15} /></button>
+                <span>
+                  <strong>{rule.principal_type} #{rule.principal_id}</strong>
+                  <small>{rule.permission} · {rule.reason || "No reason recorded"}</small>
+                </span>
+                <button
+                  className="icon-button danger-on-hover"
+                  onClick={() => void revokeRule(rule)}
+                  aria-label={`Revoke rule ${rule.id}`}
+                  disabled={busy === `revoke-${rule.id}`}
+                >
+                  <X size={15} />
+                </button>
               </div>
-            )) : <p className="admin-empty">No document-specific rules. The effective decision will still include inherited folder, cabinet, or global rules.</p>}
+            )) : <p className="admin-empty">No active rules for this file. The effective decision may still come from folder/cabinet/global rules.</p>}
           </div>
         </SectionCard>
       </div>

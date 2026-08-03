@@ -167,3 +167,129 @@ def update_access_rule(
     except (ValueError, PermissionError, LookupError, RuntimeError) as exc:
         db.rollback()
         raise HTTPException(status_code=404 if isinstance(exc, LookupError) else 400, detail=str(exc)) from exc
+
+
+# ── User-centric document access view ─────────────────────────────────────────
+
+@router.get(
+    "/user/{user_id}/doc-rules",
+    response_model=list[schemas.UserDocRuleOut],
+    summary="List all DOC-scoped access rules for a user (incl. revoke history)",
+)
+def list_user_doc_rules(
+    user_id: Annotated[int, Path(gt=0)],
+    actor: models.User = Depends(require_global("ADMIN")),
+    db: Session = Depends(get_db),
+) -> list[schemas.UserDocRuleOut]:
+    """Return every DOC-scoped access_rule for the given user.
+
+    Includes both active and revoked (is_active=False) rules so admins
+    can see the full history.  All permissions (VIEW, DOWNLOAD, …) are
+    returned.  Requires at least the ADMIN global permission.
+    """
+    from sqlalchemy import select as _select
+
+    # Verify the target user exists.
+    target = db.get(models.User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Join access_rules → documents to get document title + class.
+    stmt = (
+        _select(models.AccessRule, models.Document)
+        .join(
+            models.Document,
+            (models.AccessRule.scope_id == models.Document.id)
+            & (models.AccessRule.scope_type == "DOC"),
+        )
+        .where(
+            models.AccessRule.user_id == user_id,
+            models.AccessRule.scope_type == "DOC",
+        )
+        .order_by(models.AccessRule.created_at.desc())
+        .limit(500)
+    )
+
+    rows = db.execute(stmt).all()
+
+    result: list[schemas.UserDocRuleOut] = []
+    for rule, doc in rows:
+        doc_class_name: str | None = None
+        if doc.doc_class is not None:
+            doc_class_name = doc.doc_class.name
+        result.append(
+            schemas.UserDocRuleOut(
+                rule_id=rule.id,
+                doc_id=doc.id,
+                doc_title=doc.title,
+                doc_class=doc_class_name,
+                effect=rule.effect,
+                permission=rule.permission.code,
+                reason=rule.reason,
+                is_active=rule.is_active,
+                created_at=rule.created_at,
+            )
+        )
+    return result
+
+
+# ── Access-control matrix (all users × all docs) ───────────────────────────────
+
+@router.get(
+    "/all-doc-rules",
+    response_model=list[schemas.AllDocRuleOut],
+    summary="List every DOC-scoped access rule across all users",
+)
+def list_all_doc_rules(
+    actor: models.User = Depends(require_global("ADMIN")),
+    db: Session = Depends(get_db),
+) -> list[schemas.AllDocRuleOut]:
+    """Return every DOC-scoped access_rule for every user, including history.
+
+    Sorted by user name then document title.  Requires ADMIN permission.
+    """
+    from sqlalchemy import select as _select
+
+    stmt = (
+        _select(models.AccessRule, models.Document, models.User)
+        .join(
+            models.Document,
+            (models.AccessRule.scope_id == models.Document.id)
+            & (models.AccessRule.scope_type == "DOC"),
+        )
+        .join(
+            models.User,
+            models.AccessRule.user_id == models.User.id,
+        )
+        .where(
+            models.AccessRule.scope_type == "DOC",
+            models.AccessRule.user_id.is_not(None),
+        )
+        .order_by(models.User.name, models.Document.title, models.AccessRule.created_at.desc())
+        .limit(1000)
+    )
+
+    rows = db.execute(stmt).all()
+
+    result: list[schemas.AllDocRuleOut] = []
+    for rule, doc, user in rows:
+        doc_class_name: str | None = None
+        if doc.doc_class is not None:
+            doc_class_name = doc.doc_class.name
+        result.append(
+            schemas.AllDocRuleOut(
+                rule_id=rule.id,
+                user_id=user.id,
+                user_name=user.name,
+                user_username=user.username,
+                doc_id=doc.id,
+                doc_title=doc.title,
+                doc_class=doc_class_name,
+                effect=rule.effect,
+                permission=rule.permission.code,
+                reason=rule.reason,
+                is_active=rule.is_active,
+                created_at=rule.created_at,
+            )
+        )
+    return result
