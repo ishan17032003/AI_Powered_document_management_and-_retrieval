@@ -1,9 +1,9 @@
 import { Children, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Bot, FileText, Image as ImageIcon, Send, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, FileText, Image as ImageIcon, Send, Sparkles, X } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { api, AskResponse } from "../api";
+import { api, AskResponse, VisualSearchHit } from "../api";
 import { PageHeader, StatusPill } from "../components/ui";
 
 interface Turn {
@@ -63,6 +63,7 @@ export default function Ask() {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
+  const [zoomed, setZoomed] = useState<VisualSearchHit | null>(null);
   const requestedPreviews = useRef(new Set<number>());
   const createdPreviewUrls = useRef<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -98,6 +99,15 @@ export default function Ask() {
   useEffect(() => () => {
     createdPreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setZoomed(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomed]);
 
   async function run(value: string, documentId?: number) {
     const normalized = value.trim();
@@ -233,11 +243,12 @@ export default function Ask() {
                             {(turn.response.images?.length ?? 0) > 0 && (
                               <div className="answer-images">
                                 {turn.response.images.map((hit) => (
-                                  <Link
+                                  <button
                                     key={hit.asset_id}
-                                    to={`/documents/${hit.document_id}`}
+                                    type="button"
                                     className="answer-image"
                                     title={hit.title}
+                                    onClick={() => setZoomed(hit)}
                                   >
                                     {previewUrls[hit.asset_id] ? (
                                       <img src={previewUrls[hit.asset_id]} alt={hit.title} loading="lazy" />
@@ -245,7 +256,7 @@ export default function Ask() {
                                       <span className="answer-image-placeholder"><ImageIcon size={18} /></span>
                                     )}
                                     <small>{hit.page_number ? `${hit.title} — p.${hit.page_number}` : hit.title}</small>
-                                  </Link>
+                                  </button>
                                 ))}
                               </div>
                             )}
@@ -289,6 +300,43 @@ export default function Ask() {
           <small>Answers can only use documents you have permission to view.</small>
         </form>
       </section>
+
+      <AnimatePresence>
+        {zoomed && (
+          <motion.div
+            className="dialog-backdrop image-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={zoomed.title}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setZoomed(null)}
+          >
+            <figure onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className="icon-button dialog-close"
+                onClick={() => setZoomed(null)}
+                aria-label="Close image"
+              >
+                <X size={18} />
+              </button>
+              {previewUrls[zoomed.asset_id] ? (
+                <img src={previewUrls[zoomed.asset_id]} alt={zoomed.title} />
+              ) : (
+                <span className="answer-image-placeholder"><ImageIcon size={28} /></span>
+              )}
+              <figcaption>
+                <span>{zoomed.page_number ? `${zoomed.title} — p.${zoomed.page_number}` : zoomed.title}</span>
+                <Link to={`/documents/${zoomed.document_id}`} onClick={() => setZoomed(null)}>
+                  Open document
+                </Link>
+              </figcaption>
+            </figure>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

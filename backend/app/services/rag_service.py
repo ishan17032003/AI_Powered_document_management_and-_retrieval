@@ -348,6 +348,9 @@ def _answer_with_vllm(question: str, passages: list[Passage]) -> str | None:
         "messages": _provider_messages(question, passages),
         "temperature": 0.2,
         "max_tokens": settings.rag_provider_max_output_tokens,
+        # Guided decoding guarantees the answer/sources JSON envelope; open
+        # -weight models drift off prompt-only format contracts.
+        "response_format": {"type": "json_object"},
     }
     try:
         with httpx.Client(
@@ -445,7 +448,13 @@ _SYSTEM = (
     "it in the documents — do not pad the reply with unrelated content.\n"
     "- Format the answer in simple markdown: use short paragraphs, '-' bullet "
     "lists, and **bold** for key terms. No headings or tables.\n"
-    "- Never invent facts."
+    "- Never invent facts.\n"
+    "Output contract:\n"
+    '- Reply with ONLY a JSON object, no code fences: {"answer": "<the markdown '
+    'answer with inline [n] citations>", "sources": [<the excerpt numbers the '
+    "answer actually relies on>]}.\n"
+    "- Include an excerpt number in sources only if the answer truly uses that "
+    "excerpt; excerpts you read but ignored must not appear."
 )
 
 _UNTRUSTED_INPUT_SCHEMA = "docvault.rag-untrusted-input.v1"
@@ -494,6 +503,54 @@ def _answer_with_claude(client, question: str, passages: list[Passage]) -> str |
         return "\n".join(parts).strip() or None
     except Exception:
         return None
+
+
+def _parse_provider_answer(text: str) -> tuple[str, list[int] | None]:
+    """Split a provider reply into (answer, excerpt numbers the model used).
+
+    The model is the only party that knows which excerpts its answer relies
+    on, so it reports them itself in the JSON envelope. A reply that ignores
+    the envelope is kept verbatim with unknown sources — behaviour then
+    matches the pre-envelope pipeline exactly.
+    """
+    candidate = text.strip()
+    if candidate.startswith("```"):
+        candidate = candidate.split("\n", 1)[-1]
+        if candidate.rstrip().endswith("```"):
+            candidate = candidate.rstrip()[:-3]
+    try:
+        data = json.loads(candidate)
+    except ValueError:
+        return text, None
+    if not isinstance(data, dict):
+        return text, None
+    answer = data.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return text, None
+    sources = data.get("sources")
+    used = (
+        [value for value in sources if type(value) is int]
+        if isinstance(sources, list)
+        else None
+    )
+    return answer.strip(), used or None
+
+
+def _used_citations(
+    citations: list[dict[str, object]], used: list[int] | None
+) -> list[dict[str, object]]:
+    """Trim the citation manifest to the excerpts the model said it used.
+
+    Retrieval is recall-oriented, so the manifest routinely holds passages the
+    model read but ignored; showing those as sources misleads the reader and
+    widens every downstream scope (source chips, answer images). An unknown or
+    fully-invalid sources list keeps the whole manifest.
+    """
+    if not used:
+        return citations
+    markers = set(used)
+    referenced = [item for item in citations if item.get("index") in markers]
+    return referenced or citations
 
 
 def _answer_extractive(
@@ -565,10 +622,11 @@ def _compose(
             total_timeout_seconds=total_timeout,
         )
         if text:
+            answer_text, used = _parse_provider_answer(text)
             return Answer(
-                answer=text,
+                answer=answer_text,
                 mode="vllm",
-                citations=citations,
+                citations=_used_citations(citations, used),
                 scoped_document_id=scoped_id,
                 model=settings.vllm_model,
             )
@@ -579,10 +637,11 @@ def _compose(
             total_timeout_seconds=total_timeout,
         )
         if text:
+            answer_text, used = _parse_provider_answer(text)
             return Answer(
-                answer=text,
+                answer=answer_text,
                 mode="ollama",
-                citations=citations,
+                citations=_used_citations(citations, used),
                 scoped_document_id=scoped_id,
                 model=settings.ollama_model,
             )
@@ -600,10 +659,11 @@ def _compose(
             total_timeout_seconds=total_timeout,
         )
         if text:
+            answer_text, used = _parse_provider_answer(text)
             return Answer(
-                answer=text,
+                answer=answer_text,
                 mode="claude",
-                citations=citations,
+                citations=_used_citations(citations, used),
                 scoped_document_id=scoped_id,
                 model=settings.rag_model,
             )
