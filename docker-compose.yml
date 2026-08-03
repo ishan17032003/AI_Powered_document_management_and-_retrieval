@@ -192,6 +192,7 @@ services:
     environment:
       DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
     volumes: ["docvault_db:/data"]
+    secrets: [docvault_secret_key]
     networks: ["docvault-data-net"]
 
   maintenance:
@@ -203,6 +204,7 @@ services:
     environment:
       DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
     volumes: ["docvault_db:/data"]
+    secrets: [docvault_secret_key]
     networks: ["docvault-data-net"]
 
   backup:
@@ -216,6 +218,7 @@ services:
       DOCVAULT_BACKUP_DESTINATION: "${DOCVAULT_BACKUP_DESTINATION:-}"
       DOCVAULT_BACKUP_QUIESCENT: "${DOCVAULT_BACKUP_QUIESCENT:-false}"
     volumes: ["docvault_db:/data"]
+    secrets: [docvault_secret_key]
     networks: ["docvault-data-net"]
 
   qdrant:
