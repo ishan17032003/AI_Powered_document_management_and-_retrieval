@@ -215,7 +215,9 @@ def persist_visual_output(
         asset_id=asset_id,
         version_id=version_id,
         output_type=output_type,
-        text=(text or "")[:5_000_000],
+        # PostgreSQL text columns reject NUL bytes, which broken PDF glyph
+        # mappings routinely produce. They carry no meaning; drop them.
+        text=(text or "").replace("\x00", "")[:5_000_000],
         engine_revision=engine_revision,
         confidence=confidence,
         language=language[:40] if language else None,

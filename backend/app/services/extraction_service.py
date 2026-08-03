@@ -283,6 +283,10 @@ class OcrResult:
 
 
 def _finalize_result(result: OcrResult) -> OcrResult:
+    # PostgreSQL text columns reject NUL bytes, which broken PDF glyph mappings
+    # routinely produce. They carry no meaning; drop them before anything
+    # downstream tries to persist the text.
+    result.text = (result.text or "").replace("\x00", "")
     result.language = _detect_language(result.text)
     result.quality_score, measured = _measure_quality(
         result.text,
