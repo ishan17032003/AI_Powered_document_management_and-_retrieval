@@ -368,7 +368,9 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
                 return job
             db.commit()
             db.refresh(job)
-    except Exception:
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
         db.rollback()
         fresh = db.get(models.IngestionJob, job.id)
         if fresh is not None:

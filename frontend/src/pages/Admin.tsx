@@ -38,9 +38,9 @@ export default function Admin() {
   const [documents, setDocuments] = useState<DocSummary[]>([]);
   const [matrix, setMatrix] = useState<RbacMatrix | null>(null);
 
-  // Access-control matrix (all users × all docs)
+  // Access-control matrix
   const [allRules, setAllRules] = useState<AllDocRule[]>([]);
-  const [matrixFilter, setMatrixFilter] = useState("");
+  const [selectedAcmUserId, setSelectedAcmUserId] = useState<string>("");
   const [matrixLoading, setMatrixLoading] = useState(false);
 
   // Legacy doc-centric grant panel
@@ -60,25 +60,13 @@ export default function Admin() {
   const selectedUser = users.find((item) => item.id === Number(selectedUserId));
   const selectedDocument = documents.find((item) => item.id === Number(selectedDocumentId));
 
-  // Filtered access matrix rows
-  const filteredRules = useMemo(() => {
-    const q = matrixFilter.toLowerCase().trim();
-    if (!q) return allRules;
-    return allRules.filter(
-      (r) =>
-        r.user_name.toLowerCase().includes(q) ||
-        r.user_username.toLowerCase().includes(q) ||
-        r.doc_title.toLowerCase().includes(q) ||
-        (r.doc_class ?? "").toLowerCase().includes(q) ||
-        r.permission.toLowerCase().includes(q) ||
-        r.effect.toLowerCase().includes(q)
-    );
-  }, [allRules, matrixFilter]);
 
   async function loadAllRules() {
     setMatrixLoading(true);
     try {
-      setAllRules(await api.listAllDocRules());
+      const data = await api.listAllDocRules();
+      // Only keep active rules as per user request to not show history
+      setAllRules(data.filter((r) => r.is_active));
     } catch (err: any) {
       setError(err.message || "Could not load access matrix.");
     } finally {
@@ -222,16 +210,11 @@ export default function Admin() {
     return <div className="notice is-danger">Administrator permission is required to manage users and file access.</div>;
   }
 
-  // Group filtered rules by user for the matrix display
-  const rulesByUser = useMemo(() => {
-    const map = new Map<string, { userName: string; username: string; userId: number; rules: AllDocRule[] }>();
-    filteredRules.forEach((r) => {
-      const key = String(r.user_id);
-      if (!map.has(key)) map.set(key, { userName: r.user_name, username: r.user_username, userId: r.user_id, rules: [] });
-      map.get(key)!.rules.push(r);
-    });
-    return [...map.values()];
-  }, [filteredRules]);
+  // Filter rules for the selected user
+  const userRules = useMemo(() => {
+    if (!selectedAcmUserId) return [];
+    return allRules.filter((r) => r.user_id.toString() === selectedAcmUserId);
+  }, [allRules, selectedAcmUserId]);
 
   return (
     <div className="admin-page">
@@ -248,29 +231,36 @@ export default function Admin() {
       <SectionCard className="acm-card">
         <div className="section-heading">
           <div>
-            <span className="section-kicker">All users · all documents</span>
+            <span className="section-kicker">User specific</span>
             <h2><Lock size={19} /> Access control matrix</h2>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span className="section-count">{filteredRules.length}</span>
+            <span className="section-count">{userRules.length}</span>
             <div className="acm-search-wrap">
-              <Search size={13} />
-              <input
+              <Users size={13} style={{ opacity: 0.5, marginLeft: 8 }} />
+              <select
                 className="acm-search"
-                placeholder="Filter by user, document, permission…"
-                value={matrixFilter}
-                onChange={(e) => setMatrixFilter(e.target.value)}
-              />
+                style={{ appearance: "none", paddingLeft: 28 }}
+                value={selectedAcmUserId}
+                onChange={(e) => setSelectedAcmUserId(e.target.value)}
+              >
+                <option value="">Select a user...</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.username})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
         {matrixLoading ? (
           <p className="admin-empty">Loading…</p>
-        ) : allRules.length === 0 ? (
-          <p className="admin-empty">No document-level access rules exist yet. Use "Grant file access" below to add one.</p>
-        ) : rulesByUser.length === 0 ? (
-          <p className="admin-empty">No rules match your filter.</p>
+        ) : !selectedAcmUserId ? (
+          <p className="admin-empty">Please select a user to view their permitted documents.</p>
+        ) : userRules.length === 0 ? (
+          <p className="admin-empty">This user has no permitted documents.</p>
         ) : (
           <div className="acm-table">
             <div className="acm-header">
@@ -283,62 +273,48 @@ export default function Admin() {
               {isSuperAdmin && <span />}
             </div>
 
-            {rulesByUser.map(({ userName, username, userId, rules: userRules }) => (
-              <div key={userId} className="acm-user-group">
-                {/* User header row */}
-                <div className="acm-user-header">
-                  <span className="avatar is-small">{userName.slice(0, 2).toUpperCase()}</span>
-                  <strong>{userName}</strong>
-                  <span className="acm-username">{username}</span>
-                  <span className="acm-rule-count">{userRules.length} rule{userRules.length !== 1 ? "s" : ""}</span>
+            <div className="acm-user-group">
+              {/* Rule rows for this user */}
+              {userRules.map((rule) => (
+                <div
+                  key={rule.rule_id}
+                  className="acm-row"
+                >
+                  <span className="acm-doc">
+                    <FileText size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
+                    <span>{rule.doc_title}</span>
+                  </span>
+                  <span className="acm-class">
+                    {rule.doc_class ?? <em style={{ opacity: 0.4 }}>—</em>}
+                  </span>
+                  <span>
+                    <span className="perm-badge">{rule.permission}</span>
+                  </span>
+                  <span>
+                    <StatusPill tone={toneForStatus(rule.effect)}>{rule.effect}</StatusPill>
+                  </span>
+                  <span className="acm-reason">
+                    {rule.reason || <em style={{ opacity: 0.35 }}>—</em>}
+                  </span>
+                  <span className="acm-date">
+                    {new Date(rule.created_at).toLocaleDateString()}
+                  </span>
+                  {isSuperAdmin && (
+                    <span>
+                      <button
+                        className="icon-button danger-on-hover"
+                        onClick={() => void revokeMatrixRule(rule.rule_id)}
+                        aria-label={`Revoke access to ${rule.doc_title}`}
+                        disabled={busy === `mx-${rule.rule_id}`}
+                        title="Delete access"
+                      >
+                        <X size={13} />
+                      </button>
+                    </span>
+                  )}
                 </div>
-
-                {/* Rule rows for this user */}
-                {userRules.map((rule) => (
-                  <div
-                    key={rule.rule_id}
-                    className={`acm-row${!rule.is_active ? " is-revoked" : ""}`}
-                  >
-                    <span className="acm-doc">
-                      <FileText size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
-                      <span>{rule.doc_title}</span>
-                    </span>
-                    <span className="acm-class">
-                      {rule.doc_class ?? <em style={{ opacity: 0.4 }}>—</em>}
-                    </span>
-                    <span>
-                      <span className="perm-badge">{rule.permission}</span>
-                    </span>
-                    <span>
-                      <StatusPill tone={toneForStatus(rule.effect)}>{rule.effect}</StatusPill>
-                    </span>
-                    <span className="acm-reason">
-                      {rule.reason || <em style={{ opacity: 0.35 }}>—</em>}
-                    </span>
-                    <span className="acm-date">
-                      {new Date(rule.created_at).toLocaleDateString()}
-                    </span>
-                    {isSuperAdmin && (
-                      <span>
-                        {rule.is_active ? (
-                          <button
-                            className="icon-button danger-on-hover"
-                            onClick={() => void revokeMatrixRule(rule.rule_id)}
-                            aria-label={`Revoke ${rule.user_name}'s access to ${rule.doc_title}`}
-                            disabled={busy === `mx-${rule.rule_id}`}
-                            title="Revoke access"
-                          >
-                            <X size={13} />
-                          </button>
-                        ) : (
-                          <span className="acm-revoked-badge">Revoked</span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </SectionCard>

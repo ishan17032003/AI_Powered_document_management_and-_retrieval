@@ -245,6 +245,7 @@ services:
       timeout: 5s
       retries: 5
 
+
   # One-shot service that creates the required buckets on first boot.
   minio-init:
     image: "minio/mc:latest"
@@ -271,6 +272,8 @@ services:
     image: "postgres:15-alpine"
     container_name: docvault-postgres
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -279,6 +282,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - docvault-data-net
+      - docvault-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d docvault"]
       interval: 10s

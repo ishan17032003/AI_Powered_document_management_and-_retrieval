@@ -283,6 +283,7 @@ class OcrResult:
 
 
 def _finalize_result(result: OcrResult) -> OcrResult:
+    result.text = result.text.replace("\x00", "")
     result.language = _detect_language(result.text)
     result.quality_score, measured = _measure_quality(
         result.text,

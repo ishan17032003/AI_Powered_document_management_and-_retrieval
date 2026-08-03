@@ -52,7 +52,7 @@ def _page_texts(data: bytes, page_count: int, fallback: str) -> list[str]:
 
         document = fitz.open(stream=data, filetype="pdf")
         try:
-            values = [document.load_page(index).get_text("text").strip() for index in range(document.page_count)]
+            values = [document.load_page(index).get_text("text").replace("\x00", "").strip() for index in range(document.page_count)]
         finally:
             document.close()
     except Exception:
