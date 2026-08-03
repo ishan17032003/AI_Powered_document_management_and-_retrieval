@@ -39,3 +39,5 @@ artifacts/baseline/*/isolation/
 *.md
 !/README.md
 secrets/
+hf_cache/
+lancedb/

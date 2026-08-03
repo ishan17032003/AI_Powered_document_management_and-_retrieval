@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..observability import sensitive_query_telemetry, trace_span
+from ..repositories import visual_search_repository
 from ..retrieval_store import RetrievalStoreError
 from ..utils.request_context import (
     RequestContext,
@@ -174,6 +177,90 @@ def run_visual_image_search(
     )
 
 
+_VISUAL_INTENT_TERMS = frozenset({
+    "image", "images", "picture", "pictures", "photo", "photos", "photograph",
+    "photographs", "figure", "figures", "chart", "charts", "graph", "graphs",
+    "diagram", "diagrams", "screenshot", "screenshots", "logo", "logos",
+    "drawing", "drawings", "illustration", "illustrations", "visual", "visuals",
+})
+
+_ASK_IMAGE_LIMIT = 5
+
+
+def _has_visual_intent(question: str) -> bool:
+    return not _VISUAL_INTENT_TERMS.isdisjoint(re.findall(r"[a-z]+", question.lower()))
+
+
+def _ask_images(
+    db: Session,
+    user: models.User,
+    *,
+    question: str,
+    allowed_ids: set[int] | None,
+    document_id: int | None,
+    result,
+) -> list[schemas.VisualSearchHit]:
+    """Attach authorized figure/diagram images (never page renders) to an answer.
+
+    The documents the answer actually cited always win: a question that names
+    one PDF only ever shows that PDF's figures. Only a visual question that
+    produced no citations at all falls back to searching every authorized
+    document. When the question's words don't match any visual text (typical
+    for "summarize this"), fall back to the scoped documents' own figures so an
+    illustrated PDF still shows its images beside the answer.
+    """
+    scope = set(allowed_ids or ())
+    if document_id is not None:
+        scope &= {document_id}
+    else:
+        cited = {item["document_id"] for item in result.citations}
+        if result.scoped_document_id is not None:
+            cited.add(result.scoped_document_id)
+        if cited:
+            scope &= cited
+        elif not _has_visual_intent(question):
+            return []
+    if not scope:
+        return []
+    try:
+        visual = visual_search_service.search(
+            db,
+            user,
+            query=question,
+            mode="text_to_image",
+            limit=_ASK_IMAGE_LIMIT,
+            allowed_ids=scope,
+        )
+        if visual.hits:
+            return visual.hits
+        candidates = visual_search_repository.list_candidates(
+            db,
+            document_ids=frozenset(scope),
+            asset_types=frozenset({"IMAGE", "REGION"}),
+            limit=200,
+        )
+    except Exception:
+        # Images are a best-effort enrichment; the grounded answer stands alone.
+        return []
+    candidates.sort(key=lambda c: (c.page_number or 0, c.asset_id))
+    return [
+        schemas.VisualSearchHit(
+            asset_id=candidate.asset_id,
+            document_id=candidate.document_id,
+            version_id=candidate.version_id,
+            title=candidate.title,
+            asset_type=candidate.asset_type,
+            result_type="image",
+            page_number=candidate.page_number,
+            content_type=candidate.content_type,
+            snippet=(candidate.extraction_text or "")[:160],
+            score=0.0,
+            matched_lanes=["image"],
+        )
+        for candidate in candidates[:_ASK_IMAGE_LIMIT]
+    ]
+
+
 def ask(
     db: Session,
     user: models.User,
@@ -199,6 +286,15 @@ def ask(
             result = rag_service.ask(
                 db, normalized, allowed_ids, document_id=document_id, user_id=user.id
             )
+        with trace_span("retrieval", "ask_images", context=request_context):
+            images = _ask_images(
+                db,
+                user,
+                question=normalized,
+                allowed_ids=allowed_ids,
+                document_id=document_id,
+                result=result,
+            )
         audit_service.record(
             db,
             actor=user,
@@ -209,6 +305,7 @@ def ask(
                 "mode": result.mode,
                 "scoped": result.scoped_document_id,
                 "citations": len(result.citations),
+                "images": len(images),
                 **sensitive_query_telemetry(normalized),
             },
             context=request_context,
@@ -222,6 +319,7 @@ def ask(
         scoped_document_id=result.scoped_document_id,
         citations=[schemas.Citation(**item) for item in result.citations],
         candidates=[schemas.Candidate(**item) for item in result.candidates],
+        images=images,
     )
 
 

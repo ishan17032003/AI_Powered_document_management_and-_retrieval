@@ -35,10 +35,19 @@ class RetrievalReadMode(StrEnum):
     LANCEDB_PRIMARY = "lancedb_primary"
 
 
+# Docker secrets mount (compose `secrets:` block). File names map to settings
+# fields with the env prefix, e.g. /run/secrets/docvault_secret_key ->
+# secret_key. Absent outside containers, where env/.env remain the sources.
+_SECRETS_DIR = "/run/secrets" if Path("/run/secrets").is_dir() else None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="DOCVAULT_",
-        env_file=".env",
+        # Single shared env file at the repository root (also read by Docker
+        # Compose); a backend-local .env still wins if one exists.
+        env_file=(str(BASE_DIR.parent / ".env"), ".env"),
+        secrets_dir=_SECRETS_DIR,
         extra="ignore",
         hide_input_in_errors=True,
     )
@@ -125,6 +134,9 @@ class Settings(BaseSettings):
     # accidentally enabled in their environment.
     lancedb_writer_enabled: bool = False
     lancedb_lock_timeout_seconds: float = Field(default=5.0, ge=0.05, le=300.0)
+    # Store BGE-M3 dense vectors on text_chunks rows and serve text retrieval
+    # as a BM25+vector hybrid with cross-encoder reranking — no Qdrant involved.
+    lancedb_text_vectors_enabled: bool = False
 
     # Text-to-visual retrieval uses the authoritative visual asset/extraction
     # records and exact SQL authorization.  The lexical lane is deliberately
@@ -171,8 +183,11 @@ class Settings(BaseSettings):
     #   "ollama"    -> local open-weight model only (offline, India-resident)
     #   "anthropic" -> Claude only
     #   "none"      -> extractive passages only
-    llm_provider: str = "none"
+    llm_provider: str = "vllm"
     allow_external_llm: bool = False
+    # Development-only escape hatch: permit plain-HTTP egress to an allowlisted
+    # external provider host. Keep False anywhere document content matters.
+    allow_insecure_llm_http: bool = False
     llm_allowed_hosts: list[str] = []
     # Context window for answer generation. 5 passages × 1800 chars each = up to 9 000 chars.
     rag_max_context_chars: int = 9000

@@ -19,8 +19,85 @@ from ..config import settings
 from ..storage import object_store
 from . import page_renderer, visual_assets, visual_retrieval, visual_semantic_service
 
-VISUAL_MANIFEST_VERSION = "visual-text-v1"
+VISUAL_MANIFEST_VERSION = "visual-text-v2"
 VISUAL_STAGE_NAME = "VISUAL_INDEXING"
+
+# Vector figure detection: charts/diagrams drawn as PDF vector graphics leave
+# no embedded raster to extract, so dense drawing clusters are rendered as
+# REGION assets instead. Bounds keep decorative rules/underlines (few
+# primitives, extreme aspect) and full-page layouts out of the figure set.
+_FIGURE_MERGE_MARGIN = 12.0
+_FIGURE_MIN_PRIMITIVES = 8
+_FIGURE_MIN_AREA_FRACTION = 0.03
+_FIGURE_MAX_AREA_FRACTION = 0.75
+_FIGURE_MAX_ASPECT = 12.0
+_FIGURE_MAX_PER_PAGE = 4
+_FIGURE_RENDER_ZOOM = 2.0
+
+
+def _figure_regions(page) -> list:
+    """Cluster vector drawings into bounded figure rectangles for one page."""
+
+    import fitz
+
+    rects = []
+    for drawing in page.get_drawings():
+        rect = fitz.Rect(drawing["rect"])
+        if rect.is_empty or rect.is_infinite:
+            continue
+        rects.append(rect)
+    if not rects:
+        return []
+
+    clusters: list[list] = []  # [bounding Rect, primitive count]
+    for rect in rects:
+        expanded = rect + (
+            -_FIGURE_MERGE_MARGIN,
+            -_FIGURE_MERGE_MARGIN,
+            _FIGURE_MERGE_MARGIN,
+            _FIGURE_MERGE_MARGIN,
+        )
+        merged = None
+        for cluster in clusters:
+            if cluster[0].intersects(expanded):
+                cluster[0].include_rect(rect)
+                cluster[1] += 1
+                merged = cluster
+                break
+        if merged is None:
+            clusters.append([fitz.Rect(rect), 1])
+            continue
+        # Growing a cluster can bridge it into a neighbour; re-merge to a
+        # fixed point so overlapping figures never produce duplicate regions.
+        changed = True
+        while changed:
+            changed = False
+            for index, cluster in enumerate(clusters):
+                for other in clusters[index + 1 :]:
+                    if cluster[0].intersects(other[0]):
+                        cluster[0].include_rect(other[0])
+                        cluster[1] += other[1]
+                        clusters.remove(other)
+                        changed = True
+                        break
+                if changed:
+                    break
+
+    page_area = abs(page.rect.get_area()) or 1.0
+    regions = []
+    for rect, primitives in clusters:
+        area_fraction = abs(rect.get_area()) / page_area
+        width = rect.width or 0.001
+        height = rect.height or 0.001
+        aspect = max(width / height, height / width)
+        if (
+            primitives >= _FIGURE_MIN_PRIMITIVES
+            and _FIGURE_MIN_AREA_FRACTION <= area_fraction <= _FIGURE_MAX_AREA_FRACTION
+            and aspect <= _FIGURE_MAX_ASPECT
+        ):
+            regions.append(rect)
+    regions.sort(key=lambda value: -abs(value.get_area()))
+    return regions[:_FIGURE_MAX_PER_PAGE]
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +344,55 @@ def _process_pdf(
                         # One malformed/unsupported embedded object must not
                         # discard otherwise valid page assets.  The page-level
                         # visual stage remains observable through its manifest.
+                        continue
+                for region in _figure_regions(page):
+                    if assets >= settings.visual_max_assets_per_version:
+                        break
+                    try:
+                        pixmap = page.get_pixmap(
+                            matrix=fitz.Matrix(
+                                _FIGURE_RENDER_ZOOM, _FIGURE_RENDER_ZOOM
+                            ),
+                            clip=region,
+                        )
+                        payload = pixmap.tobytes("png")
+                        if len(payload) > settings.max_upload_bytes:
+                            continue
+                        normalized = visual_assets.normalize_visual_derivative_isolated(
+                            payload,
+                            "image/png",
+                            output_format="PNG",
+                            max_output_bytes=settings.max_upload_bytes,
+                        )
+                        file_key = _persist_derivative(normalized)
+                        asset = visual_assets.register_asset(
+                            db,
+                            document_id=document.id,
+                            version_id=version.id,
+                            asset_type="REGION",
+                            file_key=file_key,
+                            content_type="image/png",
+                            payload=normalized,
+                            page_number=page_number + 1,
+                            source_asset=page_assets.get(page_number + 1),
+                            relationship_type="REGION_OF",
+                        )
+                        assets += 1
+                        extractions += int(
+                            _register_extraction(
+                                db,
+                                asset=asset,
+                                version=version,
+                                document=document,
+                                text=page_text or document.title,
+                                page_number=page_number + 1,
+                            )
+                        )
+                    except SQLAlchemyError:
+                        raise
+                    except Exception:
+                        # A single unrenderable region must not discard the
+                        # page assets or the remaining figures.
                         continue
         finally:
             document_handle.close()

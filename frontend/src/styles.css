@@ -1984,7 +1984,76 @@ mark {
   color: var(--graphite);
   font-size: 14px;
   line-height: 1.58;
-  white-space: pre-wrap;
+}
+
+/* Markdown-rendered answers: tight, chat-style block spacing. */
+.answer-body p,
+.answer-body ul,
+.answer-body ol {
+  margin: 0 0 8px;
+}
+
+.answer-body > :last-child {
+  margin-bottom: 0;
+}
+
+.answer-body ul,
+.answer-body ol {
+  padding-left: 20px;
+}
+
+.answer-body li {
+  margin: 3px 0;
+}
+
+/* Image hits attached to an Ask answer */
+.answer-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.answer-image {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.answer-image img,
+.answer-image-placeholder {
+  width: 132px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.answer-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--graphite);
+  opacity: 0.55;
+}
+
+.answer-image small {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--graphite);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.answer-image:hover img {
+  border-color: var(--primary);
 }
 
 .citation-marker {

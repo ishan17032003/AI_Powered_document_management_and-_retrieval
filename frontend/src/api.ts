@@ -150,6 +150,7 @@ export interface AskResponse {
   scoped_document_id: number | null;
   citations: { index: number; document_id: number; title: string }[];
   candidates: { document_id: number; title: string }[];
+  images: VisualSearchHit[];
 }
 
 export interface ImportResult {

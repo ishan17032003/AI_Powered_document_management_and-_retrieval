@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { Children, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Bot, FileText, Send, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, FileText, Image as ImageIcon, Send, Sparkles } from "lucide-react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import { api, AskResponse } from "../api";
 import { PageHeader, StatusPill } from "../components/ui";
 
@@ -28,6 +29,26 @@ function AnswerText({ text }: { text: string }) {
   );
 }
 
+// Wrap plain-text markdown children so [1]-style citations keep their chip styling.
+function withCitations(children: ReactNode): ReactNode {
+  return Children.map(children, (child) =>
+    typeof child === "string" ? <AnswerText text={child} /> : child
+  );
+}
+
+const answerMarkdownComponents: Components = {
+  p: ({ children }) => <p>{withCitations(children)}</p>,
+  li: ({ children }) => <li>{withCitations(children)}</li>,
+  strong: ({ children }) => <strong>{withCitations(children)}</strong>,
+  em: ({ children }) => <em>{withCitations(children)}</em>,
+  // Answers are untrusted model output: render links as plain text.
+  a: ({ children }) => <>{withCitations(children)}</>,
+};
+
+function AnswerMarkdown({ text }: { text: string }) {
+  return <ReactMarkdown components={answerMarkdownComponents}>{text}</ReactMarkdown>;
+}
+
 function uniqueCitations(citations: AskResponse["citations"]) {
   const seen = new Set<number>();
   return citations.filter((citation) => {
@@ -41,6 +62,9 @@ export default function Ask() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
+  const requestedPreviews = useRef(new Set<number>());
+  const createdPreviewUrls = useRef<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
 
@@ -52,6 +76,28 @@ export default function Ask() {
       behavior: reduceMotion ? "auto" : "smooth",
     });
   }, [turns, reduceMotion]);
+
+  useEffect(() => {
+    const assetIds = turns
+      .flatMap((turn) => turn.response?.images || [])
+      .map((hit) => hit.asset_id)
+      .filter((assetId) => !requestedPreviews.current.has(assetId));
+    if (!assetIds.length) return;
+    assetIds.forEach((assetId) => requestedPreviews.current.add(assetId));
+    void Promise.all(assetIds.map(async (assetId) => {
+      try {
+        const url = URL.createObjectURL(await api.visualPreview(assetId));
+        createdPreviewUrls.current.push(url);
+        setPreviewUrls((current) => ({ ...current, [assetId]: url }));
+      } catch {
+        // A preview can disappear between search authorization and hydration.
+      }
+    }));
+  }, [turns]);
+
+  useEffect(() => () => {
+    createdPreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   async function run(value: string, documentId?: number) {
     const normalized = value.trim();
@@ -182,8 +228,27 @@ export default function Ask() {
                               </div>
                             )}
                             <div className="answer-body">
-                              <AnswerText text={turn.response.answer} />
+                              <AnswerMarkdown text={turn.response.answer} />
                             </div>
+                            {(turn.response.images?.length ?? 0) > 0 && (
+                              <div className="answer-images">
+                                {turn.response.images.map((hit) => (
+                                  <Link
+                                    key={hit.asset_id}
+                                    to={`/documents/${hit.document_id}`}
+                                    className="answer-image"
+                                    title={hit.title}
+                                  >
+                                    {previewUrls[hit.asset_id] ? (
+                                      <img src={previewUrls[hit.asset_id]} alt={hit.title} loading="lazy" />
+                                    ) : (
+                                      <span className="answer-image-placeholder"><ImageIcon size={18} /></span>
+                                    )}
+                                    <small>{hit.page_number ? `${hit.title} — p.${hit.page_number}` : hit.title}</small>
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
                             {turn.response.mode !== "notfound" && (
                               <div className="answer-foot">
                                 <Sparkles size={14} />

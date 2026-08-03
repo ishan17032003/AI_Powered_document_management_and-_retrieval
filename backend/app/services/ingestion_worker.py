@@ -292,6 +292,22 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
                     title=document.title,
                     content=version.ocr_text,
                 )
+            lancedb_indexed = search_service.index_lancedb_chunks(
+                document.id,
+                version.id,
+                document.title,
+                version.ocr_text,
+            )
+            ingestion_pipeline.record_optional_stage(
+                job,
+                "LANCEDB_TEXT_INDEXING",
+                (
+                    ingestion_pipeline.StageResultStatus.COMPLETED
+                    if lancedb_indexed
+                    else ingestion_pipeline.StageResultStatus.DEGRADED
+                ),
+                code=None if lancedb_indexed else "LANCEDB_TEXT_INDEX_UNAVAILABLE",
+            )
             version.embedding_version = embedding_version()
             version.index_version = INDEX_VERSION
             ingestion_pipeline.record_stage_result(

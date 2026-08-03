@@ -443,6 +443,8 @@ _SYSTEM = (
     "- Only use excerpts that are actually relevant to the question; ignore the rest.\n"
     "- If the excerpts do not contain the answer, reply plainly that you could not find "
     "it in the documents — do not pad the reply with unrelated content.\n"
+    "- Format the answer in simple markdown: use short paragraphs, '-' bullet "
+    "lists, and **bold** for key terms. No headings or tables.\n"
     "- Never invent facts."
 )
 
@@ -647,6 +649,33 @@ def _okf_passages(question: str) -> list[Passage]:
 _MAX_PASSAGES = 5  # max chunks fed to the LLM across all documents
 _PER_DOC_CHARS = 1800  # character window extracted from each matching doc
 
+# Words that describe *a* document rather than naming one; they must not count
+# toward deciding that a question named a specific title.
+_GENERIC_TITLE_TERMS = frozenset({
+    "pdf", "pdfs", "doc", "docx", "docs", "file", "files", "document",
+    "documents", "summarize", "summary", "summarise",
+})
+
+
+def _uniquely_named_document(
+    db: Session,
+    terms: list[str],
+    allowed_ids: set[int] | None,
+):
+    """Return the one document a question clearly names by title, else None."""
+
+    title_terms = [term for term in terms if term not in _GENERIC_TITLE_TERMS]
+    if not title_terms:
+        return None
+    ranked = _candidate_documents(db, title_terms, allowed_ids)
+    if not ranked:
+        return None
+    best_doc, best_score = ranked[0]
+    runner_up = ranked[1][1] if len(ranked) > 1 else 0
+    if runner_up == 0 and best_score >= min(2, len(title_terms)):
+        return best_doc
+    return None
+
 NO_ANSWER_MESSAGE = (
     "I couldn't find relevant evidence in the documents you can access. "
     "Try uploading the document or ask about a topic covered in your vault."
@@ -713,7 +742,25 @@ def ask(
     # cite them as [OKF] rather than a numbered document reference.
     okf_passages = _okf_passages(question)
 
-    # ── 3. Always-search: collect passages from ALL matching documents ──────────
+    # ── 3. Implicitly-scoped request: the question names exactly one title ─────
+    #
+    # "summarize the data story pdf" must behave like picking that document,
+    # not like a vault-wide sweep that mixes other files into the answer.
+    named_doc = _uniquely_named_document(db, terms, allowed_ids)
+    if named_doc is not None:
+        if user_id is not None:
+            current_allowed_ids = (
+                search_authorization.resolve_view_document_ids_for_user_id(db, user_id)
+            )
+            if named_doc.id not in current_allowed_ids:
+                named_doc = None
+        if named_doc is not None:
+            passage = _doc_passage(named_doc, limit, terms)
+            if passage:
+                passage.index = 1
+                return _compose(question, [passage], scoped_id=named_doc.id)
+
+    # ── 4. Always-search: collect passages from ALL matching documents ──────────
     #
     # Strategy:
     #   a) Title-matched docs get priority — pull a relevant window from each.
@@ -745,7 +792,12 @@ def ask(
     # b) Hybrid search hits — fill remaining slots.
     if len(passages) < rag_slot_limit:
         distinctive_stems = {_stem(t) for t in distinctive}
-        hits = search.search(db, question, allowed_ids, limit=20)
+        try:
+            hits = search.search(db, question, allowed_ids, limit=20)
+        except Exception:
+            # Retrieval degradation must never break the answer: title-matched
+            # passages from Postgres OCR text still compose below.
+            hits = []
         for hit in hits:
             if len(passages) >= rag_slot_limit:
                 break

@@ -17,9 +17,11 @@ from html.parser import HTMLParser
 
 from sqlalchemy.orm import Session
 
-from ..config import settings
+from ..chunking import chunk_text
+from ..config import RetrievalReadMode, settings
 from ..observability import emit_event
 from ..repositories import search_repository
+from ..retrieval_store import AuthorizedFilter, RetrievalChunk, RetrievalHit, RetrievalStoreError
 from ..utils.request_context import bound_request_context, worker_context
 from . import lancedb_service, retrieval_read_router
 
@@ -145,11 +147,16 @@ def _get_reranker():
         from FlagEmbedding import FlagReranker
 
         _reranker = FlagReranker(settings.reranker_model, use_fp16=True)
+        # FlagEmbedding constructs fine but can fail only at scoring time
+        # (e.g. transformers 5.x removed prepare_for_model). Probe before
+        # trusting it so the CrossEncoder fallback actually gets a chance.
+        _reranker.compute_score([("probe", "probe")], normalize=True)
     except Exception:
         try:
             from sentence_transformers import CrossEncoder
 
             _reranker = CrossEncoder(settings.reranker_model)
+            _reranker.predict([("probe", "probe")])
         except Exception:
             _reranker = None
     return _reranker
@@ -266,22 +273,199 @@ def _search_current(
     ]
 
 
+def _lance_vector_hits(
+    query: str, allowed: frozenset[int] | set[int] | None, limit: int
+) -> list[dict]:
+    """BGE-M3 dense-vector lane over the LanceDB text_chunks table."""
+    dense, _ = _embed([query])
+    if not dense:
+        return []
+    try:
+        import lancedb
+
+        table = lancedb.connect(str(settings.lancedb_uri)).open_table(
+            settings.lancedb_table_name
+        )
+        builder = table.search(list(dense[0])).distance_type("cosine")
+        if allowed is not None:
+            values = ",".join(str(value) for value in sorted(allowed))
+            builder = builder.where(f"document_id IN ({values})", prefilter=True)
+        rows = builder.limit(max(limit * 3, limit)).to_list()
+    except Exception:
+        return []
+    best: dict[int, dict] = {}
+    for row in rows:
+        document_id = row.get("document_id")
+        if type(document_id) is not int or document_id <= 0:
+            continue
+        if allowed is not None and document_id not in allowed:
+            continue
+        try:
+            score = 1.0 - float(row.get("_distance", 1.0))
+        except (TypeError, ValueError):
+            continue
+        hit = {
+            "document_id": document_id,
+            "snippet": str(row.get("text") or "")[:400],
+            "score": score,
+            "source": "lancedb",
+            "chunk_id": row.get("chunk_id"),
+            "version_id": row.get("version_id"),
+        }
+        current = best.get(document_id)
+        if current is None or score > current["score"]:
+            best[document_id] = hit
+    return sorted(best.values(), key=lambda item: -item["score"])
+
+
+class _LanceHybridTextStore:
+    """BM25 + BGE-M3 vector lanes over text_chunks, RRF-fused, then reranked
+    by the bge-reranker-v2-m3 cross-encoder. Model failures degrade to BM25."""
+
+    adapter_name = "lancedb"
+    _RRF_K = 60
+
+    def search(
+        self,
+        query: str,
+        authorized_filter: AuthorizedFilter | None,
+        limit: int,
+    ) -> list[RetrievalHit]:
+        allowed = (
+            authorized_filter.document_ids if authorized_filter is not None else None
+        )
+        if allowed is not None and not allowed:
+            return []
+        bm25 = [
+            hit.as_dict()
+            for hit in lancedb_service.reader_store().search(
+                query, authorized_filter, limit
+            )
+        ]
+        vector = _lance_vector_hits(query, allowed, limit)
+        fused: dict[int, dict] = {}
+        snippets: dict[int, list[str]] = {}
+        # Vector lane first: its top chunk is the semantically closest text and
+        # becomes the document's primary snippet for reranking/display.
+        for lane in (vector, bm25):
+            for rank, hit in enumerate(lane, start=1):
+                document_id = hit["document_id"]
+                entry = fused.setdefault(document_id, {**hit, "score": 0.0})
+                entry["score"] += 1.0 / (self._RRF_K + rank)
+                snippet = str(hit.get("snippet") or "")
+                if snippet and snippet not in snippets.setdefault(document_id, []):
+                    snippets[document_id].append(snippet)
+        candidates = sorted(fused.values(), key=lambda item: -item["score"])
+        candidates = candidates[: max(limit * 2, limit)]
+        # Each document may have surfaced different chunks per lane; rerank the
+        # document by its best-scoring chunk, not by whichever lane came first.
+        expanded = [
+            {**hit, "snippet": snippet}
+            for hit in candidates
+            for snippet in (snippets.get(hit["document_id"]) or [""])[:2]
+        ]
+        best: dict[int, dict] = {}
+        for hit in _rerank(query, expanded):
+            document_id = hit["document_id"]
+            current = best.get(document_id)
+            if current is None or hit.get("rerank_score", 0.0) > current.get(
+                "rerank_score", 0.0
+            ):
+                best[document_id] = hit
+        ordered = sorted(
+            best.values(),
+            key=lambda item: -float(item.get("rerank_score", item.get("score", 0.0))),
+        )[:limit]
+        return [
+            RetrievalHit(
+                document_id=hit["document_id"],
+                snippet=str(hit.get("snippet") or ""),
+                score=float(hit.get("rerank_score", hit.get("score", 0.0))),
+                source=self.adapter_name,
+                chunk_id=hit.get("chunk_id"),
+                version_id=hit.get("version_id"),
+            )
+            for hit in ordered
+        ]
+
+
 def _get_lancedb_reader():
+    if settings.lancedb_text_vectors_enabled:
+        return _LanceHybridTextStore()
     return lancedb_service.reader_store()
+
+
+def index_lancedb_chunks(
+    document_id: int,
+    version_id: int | str,
+    title: str,
+    content: str,
+) -> bool:
+    """Best-effort chunk upsert into the LanceDB text lane (single writer)."""
+    if not settings.lancedb_writer_enabled:
+        return False
+    text_value = (content or "").strip()
+    if not text_value:
+        return False
+    try:
+        chunks = chunk_text(document_id, version_id, text_value)
+        embedding_metadata = None
+        if settings.lancedb_text_vectors_enabled and chunks:
+            dense, _ = _embed([chunk.text for chunk in chunks])
+            if dense and len(dense) == len(chunks):
+                embedding_metadata = {
+                    "dense_vectors": {
+                        chunk.chunk_id: list(vector)
+                        for chunk, vector in zip(chunks, dense, strict=True)
+                    }
+                }
+        store = lancedb_service.writer_store()
+        store.upsert_chunks(
+            str(version_id),
+            [
+                RetrievalChunk(
+                    chunk_id=chunk.chunk_id,
+                    document_id=document_id,
+                    version_id=str(version_id),
+                    chunk_no=chunk.chunk_no,
+                    text=chunk.text,
+                    metadata={
+                        "title": title,
+                        "page_start": chunk.page_start,
+                        "page_end": chunk.page_end,
+                    },
+                )
+                for chunk in chunks
+            ],
+            embedding_metadata,
+        )
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "LanceDB text chunk indexing degraded for document %s", document_id
+        )
+        return False
 
 
 def search(
     db: Session, query: str, allowed_ids: set[int] | None, limit: int = 50
 ) -> list[dict]:
     """Route retrieval according to the reversible serving-mode flag."""
-    return retrieval_read_router.route_search(
-        mode=settings.retrieval_read_mode,
-        query=query,
-        allowed_ids=allowed_ids,
-        limit=limit,
-        current_search=lambda: _search_current(db, query, allowed_ids, limit),
-        lancedb_store=_get_lancedb_reader,
-    )
+    try:
+        return retrieval_read_router.route_search(
+            mode=settings.retrieval_read_mode,
+            query=query,
+            allowed_ids=allowed_ids,
+            limit=limit,
+            current_search=lambda: _search_current(db, query, allowed_ids, limit),
+            lancedb_store=_get_lancedb_reader,
+        )
+    except RetrievalStoreError:
+        # LanceDB-primary must degrade to the current lane (and ultimately to
+        # the Postgres OCR passages in RAG) instead of failing the request.
+        if RetrievalReadMode(settings.retrieval_read_mode) is RetrievalReadMode.LANCEDB_PRIMARY:
+            return _search_current(db, query, allowed_ids, limit)
+        raise
 
 
 def search_with_documents(

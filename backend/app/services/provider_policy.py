@@ -80,7 +80,11 @@ def authorize_provider_destination(
         or parsed.fragment
     ):
         raise ProviderEgressDenied("destination_invalid", normalized_provider)
-    if parsed.scheme.lower() == "http" and not _is_internal_host(hostname):
+    if (
+        parsed.scheme.lower() == "http"
+        and not _is_internal_host(hostname)
+        and not config.allow_insecure_llm_http
+    ):
         raise ProviderEgressDenied("secure_transport_required", normalized_provider)
     if hostname not in _normalized_allowed_hosts(config):
         raise ProviderEgressDenied("destination_not_allowlisted", normalized_provider)

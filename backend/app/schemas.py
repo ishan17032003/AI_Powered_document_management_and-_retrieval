@@ -333,6 +333,7 @@ class AskResponse(BaseModel):
     scoped_document_id: int | None = None
     citations: list[Citation] = Field(default_factory=list)
     candidates: list[Candidate] = Field(default_factory=list)
+    images: list[VisualSearchHit] = Field(default_factory=list)
 
 
 # ── OKF knowledge management ──────────────────────────────────────────────────
