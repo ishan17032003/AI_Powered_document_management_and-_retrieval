@@ -1,0 +1,108 @@
+# XENIUS DocVault — lightweight Coolify/UAT backend image.
+#
+# This intentionally installs only the locked base dependencies. Optional AI,
+# vector, and visual extras are disabled by docker-compose.coolify.yml so the
+# image can be built on the current single-host Coolify server without pulling
+# the large Torch/CUDA dependency set.
+
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ libffi-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv==0.11.9
+
+COPY pyproject.toml uv.lock ./
+
+ENV UV_PROJECT_ENVIRONMENT="/opt/venv" \
+    UV_PYTHON_DOWNLOADS="never" \
+    UV_LINK_MODE="copy"
+RUN uv sync --frozen --no-dev --no-install-project --compile-bytecode
+
+
+FROM python:3.12-slim AS runtime
+
+LABEL maintainer="XENIUS DocVault"
+LABEL description="PVVNL DDMS — lightweight Coolify UAT backend"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-hin \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 10001 docvault \
+    && useradd \
+        --uid 10001 \
+        --gid 10001 \
+        --home-dir /home/docvault \
+        --create-home \
+        --shell /usr/sbin/nologin \
+        docvault
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+
+COPY app/ ./app/
+COPY process.sh /usr/local/bin/docvault-process
+RUN chmod 0555 /usr/local/bin/docvault-process
+
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
+COPY okf_bundle/ ./okf_bundle/
+
+RUN mkdir -p \
+        /data/storage \
+        /data/okf_bundle \
+        /hf_cache/datasets \
+        /hf_cache/sentence_transformers \
+        /hf_cache/torch \
+        /hf_cache/xdg \
+    && chown -R 10001:10001 \
+        /data \
+        /hf_cache \
+        /home/docvault
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 0555 /entrypoint.sh
+
+ENV DOCVAULT_DATABASE_URL="sqlite:////data/docvault.db" \
+    DOCVAULT_DEBUG="false" \
+    DOCVAULT_ENABLE_DEMO_SEED="false" \
+    DOCVAULT_ENVIRONMENT="development" \
+    DOCVAULT_STORAGE_DIR="/data/storage" \
+    DOCVAULT_OKF_BUNDLE_DIR="/data/okf_bundle" \
+    DOCVAULT_FOLDER_IMPORT_ENABLED="false" \
+    DOCVAULT_FOLDER_IMPORT_ROOTS="[]" \
+    DOCVAULT_LLM_PROVIDER="none" \
+    DOCVAULT_ALLOW_EXTERNAL_LLM="false" \
+    DOCVAULT_LLM_ALLOWED_HOSTS="[]" \
+    DOCVAULT_USE_QDRANT="false" \
+    DOCVAULT_ENABLE_EMBEDDINGS="false" \
+    DOCVAULT_USE_DOCLING="false" \
+    DOCVAULT_SKIP_MODEL_PREFETCH="true" \
+    PYTHONUNBUFFERED="1" \
+    PYTHONDONTWRITEBYTECODE="1" \
+    HOME="/home/docvault" \
+    HF_HOME="/hf_cache" \
+    TRANSFORMERS_CACHE="/hf_cache" \
+    HF_DATASETS_CACHE="/hf_cache/datasets" \
+    SENTENCE_TRANSFORMERS_HOME="/hf_cache/sentence_transformers" \
+    TORCH_HOME="/hf_cache/torch" \
+    XDG_CACHE_HOME="/hf_cache/xdg" \
+    PATH="/opt/venv/bin:$PATH"
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["python", "-m", "app.container_healthcheck", "--ready"]
+
+USER 10001:10001
+
+ENTRYPOINT ["/entrypoint.sh"]
