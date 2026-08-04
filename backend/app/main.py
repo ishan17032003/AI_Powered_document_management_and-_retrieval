@@ -56,6 +56,9 @@ def _startup() -> None:
     # migrate explicitly before any process can serve.
     assert_schema_compatible(settings.database_url)
     prepare_runtime_directories(settings)
+    
+    from .model_prefetch import prefetch_models
+    prefetch_models(settings.embedding_model, settings.reranker_model)
 
 
 @app.exception_handler(ServiceError)

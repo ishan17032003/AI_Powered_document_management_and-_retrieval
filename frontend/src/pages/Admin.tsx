@@ -210,10 +210,9 @@ export default function Admin() {
     return <div className="notice is-danger">Administrator permission is required to manage users and file access.</div>;
   }
 
-  // Filter rules for the selected user
   const userRules = useMemo(() => {
     if (!selectedAcmUserId) return [];
-    return allRules.filter((r) => r.user_id.toString() === selectedAcmUserId);
+    return allRules.filter((r) => r.user_id.toString() === selectedAcmUserId && r.effect === "ALLOW" && r.is_active);
   }, [allRules, selectedAcmUserId]);
 
   return (

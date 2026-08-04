@@ -163,7 +163,7 @@ services:
       TORCH_HOME: "/hf_cache/torch"
       # Model prefetch control
       HF_TOKEN: "${HF_TOKEN:-}"
-      DOCVAULT_SKIP_MODEL_PREFETCH: "${DOCVAULT_SKIP_MODEL_PREFETCH:-false}"
+      DOCVAULT_SKIP_MODEL_PREFETCH: "true"
     entrypoint: ["python", "-m", "app.worker"]
     volumes:
       - docvault_db:/data
@@ -357,7 +357,7 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${LANCEDB_HOST_PATH:-C:/Users/Radius/Downloads/doc/ai_doc_vault/lancedb}
+      device: ${LANCEDB_HOST_PATH:-/home/ishan-prasher/Projects/devops/docker/rag/xenius_docvault/ai_doc_vault/lancedb_data}
   qdrant_data:
     name: ddms_qdrant_data
     driver: local

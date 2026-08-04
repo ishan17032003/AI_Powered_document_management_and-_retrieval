@@ -120,7 +120,7 @@ export default function Upload() {
   }, []);
 
   async function watchIngestion(rowId: string, jobId: string) {
-    for (let attempt = 0; attempt < 60 && mountedRef.current; attempt += 1) {
+    for (let attempt = 0; attempt < 200 && mountedRef.current; attempt += 1) {
       try {
         const status = await api.ingestionStatus(jobId);
         if (!mountedRef.current) return;

@@ -179,6 +179,7 @@ def record_optional_stage(
 
 def evaluate_readiness(job: models.IngestionJob) -> ReadinessDecision:
     results = stage_results(job)
+    mandatory_stage_names = {stage.value for stage in MANDATORY_STAGES}
     missing: list[str] = []
     review_required = False
     for stage in MANDATORY_STAGES:
@@ -190,12 +191,18 @@ def evaluate_readiness(job: models.IngestionJob) -> ReadinessDecision:
             StageResultStatus.DEGRADED.value,
         }:
             review_required = True
-    degraded = tuple(degraded_stages(job))
+    # Only count degraded stages that are mandatory when deciding readiness.
+    # Optional stages (LanceDB, Vector, Visual) being degraded or disabled
+    # must not push a successfully extracted document into REVIEW.
+    mandatory_degraded = tuple(
+        s for s in degraded_stages(job) if s in mandatory_stage_names
+    )
+    all_degraded = tuple(degraded_stages(job))
     return ReadinessDecision(
-        ready=not missing and not review_required and not degraded,
-        review_required=review_required or bool(degraded),
+        ready=not missing and not review_required and not mandatory_degraded,
+        review_required=review_required or bool(mandatory_degraded),
         missing_stages=tuple(missing),
-        degraded_stages=degraded,
+        degraded_stages=all_degraded,
     )
 
 

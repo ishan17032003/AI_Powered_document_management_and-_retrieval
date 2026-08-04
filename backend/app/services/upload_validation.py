@@ -30,6 +30,10 @@ _MAGIC: dict[str, tuple[bytes, ...]] = {
     ".gif": (b"GIF87a", b"GIF89a"),
     ".tif": (b"II*\x00", b"MM\x00*"),
     ".tiff": (b"II*\x00", b"MM\x00*"),
+    # BMP: 'BM' header
+    ".bmp": (b"BM",),
+    # WebP: RIFF....WEBP
+    ".webp": (b"RIFF",),
     ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
     ".docx": (b"PK\x03\x04",),
     ".xlsx": (b"PK\x03\x04",),
@@ -45,6 +49,8 @@ _CONTENT_TYPES = {
     ".gif": {"image/gif"},
     ".tif": {"image/tiff"},
     ".tiff": {"image/tiff"},
+    ".bmp": {"image/bmp", "image/x-bmp", "image/x-ms-bmp"},
+    ".webp": {"image/webp"},
     ".zip": {"application/zip", "application/x-zip-compressed"},
     ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
     ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},

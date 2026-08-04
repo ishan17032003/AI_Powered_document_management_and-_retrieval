@@ -129,7 +129,16 @@ def _get_docling_converter():
                 ),
             )
             _docling_converter = _DoclingConverter(
-                allowed_formats=[InputFormat.PDF, InputFormat.IMAGE, InputFormat.DOCX],
+                allowed_formats=[
+                    InputFormat.PDF,
+                    InputFormat.IMAGE,
+                    InputFormat.DOCX,
+                    InputFormat.PPTX,
+                    InputFormat.XLSX,
+                    InputFormat.HTML,
+                    InputFormat.MD,
+                    InputFormat.CSV,
+                ],
                 format_options={
                     InputFormat.PDF: PdfFormatOption(
                         pipeline_options=_pdf_pipeline_options
@@ -648,11 +657,17 @@ def extract_text(path: Path, content_type: str = "", filename: str = "") -> OcrR
         except Exception:
             pass
 
-    # Docling handles PDF, DOCX, PPTX, and image formats in one unified pipeline.
+    # Docling handles PDF, DOCX, PPTX, XLSX, HTML, Markdown, CSV, and image
+    # formats in one unified pipeline.
     if _docling_available() and ext in {
         ".pdf",
         ".docx",
         ".pptx",
+        ".xlsx",
+        ".html",
+        ".htm",
+        ".md",
+        ".csv",
         ".png",
         ".jpg",
         ".jpeg",
