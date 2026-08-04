@@ -2019,8 +2019,14 @@ mark {
   flex-direction: column;
   gap: 4px;
   width: 132px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
   color: inherit;
+  cursor: zoom-in;
 }
 
 .answer-image img,
@@ -2054,6 +2060,46 @@ mark {
 
 .answer-image:hover img {
   border-color: var(--primary);
+}
+
+/* Zoom lightbox for answer images */
+.image-lightbox figure {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(92vw, 960px);
+  max-height: 88vh;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.image-lightbox img,
+.image-lightbox .answer-image-placeholder {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(88vh - 96px);
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-lightbox figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--graphite);
+}
+
+.image-lightbox figcaption a {
+  flex-shrink: 0;
+  color: var(--primary);
 }
 
 .citation-marker {
