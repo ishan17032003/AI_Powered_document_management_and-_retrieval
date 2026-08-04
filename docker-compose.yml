@@ -35,6 +35,11 @@ services:
         required: false     # App validation fails closed if production values are absent
     expose:
       - "8000"            # private service port; the frontend is the public ingress
+    ports:
+      # Local-only direct access for Swagger (/docs), curl and Postman. Bound to
+      # 127.0.0.1 so the API is never reachable from the network — the frontend
+      # remains the only public ingress.
+      - "127.0.0.1:8000:8000"
     environment:
       # ── Core ──
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-development}"

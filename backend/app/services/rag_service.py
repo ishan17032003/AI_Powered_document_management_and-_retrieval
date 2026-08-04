@@ -29,6 +29,7 @@ Behaviour (unchanged from previous version):
 from __future__ import annotations
 
 import json
+import re
 import threading
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
@@ -408,6 +409,39 @@ def _doc_passage(
     )
 
 
+def _doc_windows(
+    doc: "Document",
+    limit: int,
+    terms: list[str] | None,
+    max_windows: int,
+) -> list[Passage]:
+    """One window per distinctive term, so a multi-topic question ("NOIDA and
+    FARIDABAD") gets evidence for every topic instead of only the densest one.
+
+    Single-topic questions keep the exact previous behaviour: one combined
+    window.  Identical windows (terms clustering in the same region) collapse
+    into one passage.
+    """
+    distinctive = [t for t in (terms or []) if len(t) > 2]
+    if len(distinctive) < 2 or max_windows < 2:
+        passage = _doc_passage(doc, limit, terms)
+        return [passage] if passage else []
+    if not doc.versions:
+        return []
+    text = (doc.versions[-1].ocr_text or "").strip()
+    if not text:
+        return []
+    bodies: list[str] = []
+    for term in distinctive[:max_windows]:
+        body = _relevant_window(text, [term], limit)
+        if body and body not in bodies:
+            bodies.append(body)
+    return [
+        Passage(index=1, document_id=doc.id, title=doc.title, text=body, source="rag")
+        for body in bodies
+    ]
+
+
 def _build_context(passages: list[Passage]) -> str:
     budget = settings.rag_max_context_bytes
     rendered = bytearray()
@@ -706,7 +740,7 @@ def _okf_passages(question: str) -> list[Passage]:
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-_MAX_PASSAGES = 5  # max chunks fed to the LLM across all documents
+_MAX_PASSAGES = 8  # max chunks fed to the LLM across all documents
 _PER_DOC_CHARS = 1800  # character window extracted from each matching doc
 
 # Words that describe *a* document rather than naming one; they must not count
@@ -744,6 +778,66 @@ INSUFFICIENT_EVIDENCE_MESSAGE = (
     "I found related documents, but they do not contain enough evidence to answer "
     "that question reliably."
 )
+
+# Words that widen a summary request to the whole vault rather than one file.
+_ARCHIVE_SCOPE_TERMS = frozenset({
+    "all", "every", "everything", "entire", "whole", "archive", "vault", "uploaded",
+})
+
+
+def _wants_whole_archive(question: str) -> bool:
+    return not _ARCHIVE_SCOPE_TERMS.isdisjoint(re.findall(r"[a-z]+", question.lower()))
+
+
+def _summarize_archive(
+    db: Session,
+    question: str,
+    allowed_ids: set[int] | None,
+    user_id: int | None,
+) -> Answer:
+    """Answer an archive-wide summary by enumeration instead of retrieval.
+
+    Every accessible document is relevant to "summarize all", so the document
+    list comes from SQL (always complete) rather than top-k similarity.  Each
+    readable document contributes one head-of-text capsule, and the answer
+    states the authoritative count so partial coverage can never masquerade as
+    complete.
+    """
+    if user_id is not None:
+        allowed_ids = search_authorization.resolve_view_document_ids_for_user_id(
+            db, user_id
+        )
+    docs = [
+        doc
+        for doc in rag_repository.accessible_documents(db, allowed_ids)
+        if doc.versions and (doc.versions[-1].ocr_text or "").strip()
+    ]
+    if not docs:
+        return Answer(mode="notfound", answer=NO_ANSWER_MESSAGE)
+    docs.sort(key=lambda doc: doc.id)
+
+    limit = settings.rag_max_context_chars
+    per_doc = max(300, min(_PER_DOC_CHARS, limit // len(docs)))
+    included = docs[: max(1, limit // per_doc)]
+    passages: list[Passage] = []
+    for doc in included:
+        passage = _doc_passage(doc, per_doc)
+        if passage:
+            passage.index = len(passages) + 1
+            passages.append(passage)
+
+    skipped = len(docs) - len(included)
+    caveat = (
+        f"{skipped} more documents did not fit and are not covered."
+        if skipped
+        else None
+    )
+    result = _compose(question, passages, scoped_id=None, caveat=caveat)
+    count_line = f"Your archive contains {len(docs)} readable documents"
+    if skipped:
+        count_line += f"; the summary below covers {len(passages)} of them"
+    result.answer = f"{count_line}.\n\n{result.answer}"
+    return result
 
 
 def ask(
@@ -795,14 +889,23 @@ def ask(
                 )
         return _compose(question, [passage], scoped_id=doc.id)
 
-    # ── 2. OKF fast-path ───────────────────────────────────────────────────────
+    # ── 2. Archive-wide summary: enumerate, don't retrieve ─────────────────────
+    #
+    # "Summarize all uploaded documents" is an aggregation request: every
+    # accessible document is relevant.  The always-search path below caps
+    # evidence at _MAX_PASSAGES documents and would silently present a partial
+    # vault as the whole one, so the document list must come from SQL instead.
+    if is_summary(question) and _wants_whole_archive(question):
+        return _summarize_archive(db, question, allowed_ids, user_id)
+
+    # ── 3. OKF fast-path ───────────────────────────────────────────────────────
     #
     # For stable organisational knowledge (metric definitions, policies,
     # glossaries) we prepend OKF entries to the passage list.  The LLM will
     # cite them as [OKF] rather than a numbered document reference.
     okf_passages = _okf_passages(question)
 
-    # ── 3. Implicitly-scoped request: the question names exactly one title ─────
+    # ── 4. Implicitly-scoped request: the question names exactly one title ─────
     #
     # "summarize the data story pdf" must behave like picking that document,
     # not like a vault-wide sweep that mixes other files into the answer.
@@ -820,7 +923,7 @@ def ask(
                 passage.index = 1
                 return _compose(question, [passage], scoped_id=named_doc.id)
 
-    # ── 4. Always-search: collect passages from ALL matching documents ──────────
+    # ── 5. Always-search: collect passages from ALL matching documents ──────────
     #
     # Strategy:
     #   a) Title-matched docs get priority — pull a relevant window from each.
@@ -843,8 +946,7 @@ def ask(
             break
         if doc.id in seen_ids:
             continue
-        p = _doc_passage(doc, _PER_DOC_CHARS, terms)
-        if p:
+        for p in _doc_windows(doc, _PER_DOC_CHARS, terms, rag_slot_limit - len(passages)):
             p.index = len(passages) + 1
             passages.append(p)
             seen_ids.add(doc.id)
@@ -869,24 +971,15 @@ def ask(
             doc = rag_repository.get_document(db, doc_id)
             if not doc or not doc.versions:
                 continue
-            text = (doc.versions[-1].ocr_text or "").strip()
-            if not text:
-                continue
-            window = _relevant_window(text, terms, _PER_DOC_CHARS)
-            # Only include if the window actually mentions a distinctive term stem.
-            if distinctive_stems and not any(
-                s in window.lower() for s in distinctive_stems
-            ):
-                continue
-            p = Passage(
-                index=len(passages) + 1,
-                document_id=doc.id,
-                title=doc.title,
-                text=window,
-                source="rag",
-            )
-            passages.append(p)
-            seen_ids.add(doc_id)
+            for p in _doc_windows(doc, _PER_DOC_CHARS, terms, rag_slot_limit - len(passages)):
+                # Only include if the window actually mentions a distinctive term stem.
+                if distinctive_stems and not any(
+                    s in p.text.lower() for s in distinctive_stems
+                ):
+                    continue
+                p.index = len(passages) + 1
+                passages.append(p)
+                seen_ids.add(doc_id)
 
     # Resolve once more after retrieval and hydration.  This is the
     # authoritative boundary immediately before context construction/provider
