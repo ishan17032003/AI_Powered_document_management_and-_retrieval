@@ -1,0 +1,183 @@
+# DocVault development-profile UAT stack for Coolify.
+#
+# Scope: this branch's validated database/retrieval path is SQLite + FTS5. The
+# application therefore runs with DOCVAULT_ENVIRONMENT=development while debug
+# and fixed demo credentials remain disabled. Do not use this Compose file as a
+# shared-production profile.
+#
+# Required Coolify variable:
+#   DOCVAULT_SECRET_KEY - generate a stable URL-safe value of at least 32 chars
+#
+# Optional Coolify variable:
+#   DOCVAULT_CORS_ORIGINS - JSON array of browser origins, if cross-origin API
+#                           access is required (the Nginx UI is same-origin)
+#
+# Assign the Coolify application domain only to `frontend` on port 80. No host
+# ports are published, and the backend/data services remain private.
+
+x-backend-build: &backend-build
+  context: ./backend
+  dockerfile: Dockerfile.coolify
+
+x-backend-image: &backend-image "${DOCVAULT_BACKEND_IMAGE:-docvault-backend:coolify}"
+
+x-backend-environment: &backend-environment
+  DOCVAULT_ENVIRONMENT: "development"
+  DOCVAULT_DEBUG: "false"
+  DOCVAULT_ENABLE_DEMO_SEED: "true"
+  DOCVAULT_DEMO_FIXED_CREDENTIALS: "false"
+  DOCVAULT_SECRET_KEY: "${DOCVAULT_SECRET_KEY:?Set_a_stable_DOCVAULT_SECRET_KEY_in_Coolify}"
+
+  DOCVAULT_DATABASE_URL: "sqlite:////data/docvault.db"
+  DOCVAULT_STORAGE_BACKEND: "filesystem"
+  DOCVAULT_STORAGE_DIR: "/data/storage"
+  DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"
+  DOCVAULT_ACCESS_TOKEN_MINUTES: "${DOCVAULT_ACCESS_TOKEN_MINUTES:-60}"
+  DOCVAULT_MAX_UPLOAD_MB: "${DOCVAULT_MAX_UPLOAD_MB:-50}"
+  DOCVAULT_CORS_ORIGINS: "${DOCVAULT_CORS_ORIGINS:-[]}"
+  DOCVAULT_TRUSTED_PROXY_CIDRS: "${DOCVAULT_TRUSTED_PROXY_CIDRS:-[]}"
+
+  DOCVAULT_FOLDER_IMPORT_ENABLED: "false"
+  DOCVAULT_FOLDER_IMPORT_ROOTS: "[]"
+
+  DOCVAULT_LLM_PROVIDER: "none"
+  DOCVAULT_ALLOW_EXTERNAL_LLM: "false"
+  DOCVAULT_ALLOW_INSECURE_LLM_HTTP: "false"
+  DOCVAULT_LLM_ALLOWED_HOSTS: "[]"
+
+  DOCVAULT_RETRIEVAL_READ_MODE: "current"
+  DOCVAULT_LANCEDB_URI: "/data/lancedb"
+  DOCVAULT_LANCEDB_WRITER_ENABLED: "false"
+  DOCVAULT_LANCEDB_TEXT_VECTORS_ENABLED: "false"
+  DOCVAULT_ENABLE_EMBEDDINGS: "false"
+  DOCVAULT_EMBEDDING_MODEL: ""
+  DOCVAULT_RERANKER_MODEL: ""
+  DOCVAULT_USE_QDRANT: "false"
+  DOCVAULT_USE_DOCLING: "false"
+  DOCVAULT_VISUAL_SEARCH_ENABLED: "false"
+  DOCVAULT_VISUAL_SEMANTIC_SEARCH_ENABLED: "false"
+  DOCVAULT_VISUAL_SEMANTIC_INGESTION_ENABLED: "false"
+  DOCVAULT_SKIP_MODEL_PREFETCH: "true"
+
+  DOCVAULT_INGESTION_WORKER_COUNT: "1"
+  GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
+  HF_HOME: "/data/cache/huggingface"
+  TRANSFORMERS_CACHE: "/data/cache/huggingface"
+  HF_DATASETS_CACHE: "/data/cache/huggingface/datasets"
+  SENTENCE_TRANSFORMERS_HOME: "/data/cache/huggingface/sentence_transformers"
+  TORCH_HOME: "/data/cache/torch"
+  XDG_CACHE_HOME: "/data/cache/xdg"
+
+x-backend-security: &backend-security
+  user: "10001:10001"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  tmpfs:
+    - /tmp:noexec,nosuid,size=64m
+
+services:
+  migration:
+    build: *backend-build
+    image: *backend-image
+    <<: *backend-security
+    # Coolify-specific: an exited zero-status one-shot must not make the whole
+    # application appear unhealthy.
+    exclude_from_hc: true
+    restart: "no"
+    entrypoint: ["/usr/local/bin/docvault-process"]
+    command: ["migrate"]
+    environment:
+      DOCVAULT_DATABASE_URL: "sqlite:////data/docvault.db"
+    volumes:
+      - docvault_data:/data
+
+  lancedb-init:
+    build: *backend-build
+    image: *backend-image
+    <<: *backend-security
+    # This derived local text index prevents otherwise-successful uploads from
+    # being marked degraded. It does not download or enable embedding models.
+    exclude_from_hc: true
+    restart: "no"
+    entrypoint: ["python", "-c"]
+    command:
+      - "from app.services.lancedb_service import provision; provision()"
+    environment:
+      <<: *backend-environment
+      DOCVAULT_LANCEDB_WRITER_ENABLED: "true"
+    volumes:
+      - docvault_data:/data
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+  backend:
+    build: *backend-build
+    image: *backend-image
+    <<: *backend-security
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    volumes:
+      - docvault_data:/data
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      lancedb-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.container_healthcheck", "--ready"]
+      interval: 15s
+      timeout: 10s
+      start_period: 45s
+      retries: 5
+    stop_grace_period: 45s
+
+  ingestion-worker:
+    build: *backend-build
+    image: *backend-image
+    <<: *backend-security
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-environment
+      DOCVAULT_LANCEDB_WRITER_ENABLED: "true"
+    volumes:
+      - docvault_data:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    stop_grace_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /var/cache/nginx:noexec,nosuid,size=16m
+      - /var/run:noexec,nosuid,size=1m
+      - /tmp:noexec,nosuid,size=8m
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/v1/ready"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  docvault_data:
