@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         env_prefix="DOCVAULT_",
         # Single shared env file at the repository root (also read by Docker
         # Compose); a backend-local .env still wins if one exists.
-        env_file=(str(BASE_DIR.parent / ".env"), ".env"),
+        env_file=(str(BASE_DIR.parent / ".env"), ".env", "/data/.env"),
         secrets_dir=_SECRETS_DIR,
         extra="ignore",
         hide_input_in_errors=True,

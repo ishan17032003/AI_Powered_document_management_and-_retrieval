@@ -264,3 +264,42 @@ def reclassify_document(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+
+@router.put("/settings/vllm-url", response_model=schemas.VllmUrlOut)
+def update_vllm_url(
+    payload: schemas.VllmUrlUpdate,
+    actor: models.User = Depends(require_global("ADMIN")),
+):
+    """Update the active vLLM URL dynamically and persist it to .env."""
+    from ..runtime import settings
+    from ..config import BASE_DIR
+    import re
+    from pathlib import Path as FilePath
+
+    # Update in-memory settings
+    settings.vllm_url = payload.vllm_url
+
+    # Persist to .env (prefer /data/.env for Docker/Coolify persistence)
+    data_env_path = FilePath("/data/.env")
+    env_path = data_env_path if FilePath("/data").is_dir() else BASE_DIR.parent / ".env"
+    
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+    else:
+        content = ""
+
+    if re.search(r"^DOCVAULT_VLLM_URL=.*$", content, re.MULTILINE):
+        content = re.sub(
+            r"^DOCVAULT_VLLM_URL=.*$",
+            f"DOCVAULT_VLLM_URL={payload.vllm_url}",
+            content,
+            flags=re.MULTILINE,
+        )
+    else:
+        if not content.endswith("\n") and content:
+            content += "\n"
+        content += f"DOCVAULT_VLLM_URL={payload.vllm_url}\n"
+    
+    env_path.write_text(content, encoding="utf-8")
+
+    return schemas.VllmUrlOut(vllm_url=settings.vllm_url)

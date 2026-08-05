@@ -507,3 +507,15 @@ class AllDocRuleOut(BaseModel):
     reason: str | None
     is_active: bool
     created_at: datetime
+
+
+# ── System Settings (Admin) ───────────────────────────────────────────────────
+
+class VllmUrlUpdate(RequestModel):
+    """Payload to update the vLLM URL dynamically."""
+    vllm_url: str
+
+
+class VllmUrlOut(BaseModel):
+    """Response containing the updated vLLM URL."""
+    vllm_url: str
