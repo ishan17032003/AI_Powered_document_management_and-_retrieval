@@ -78,7 +78,13 @@ ensure_writable_directory() {
 }
 
 ensure_writable_directory "${DOCVAULT_STORAGE_DIR}" "Storage directory"
-ensure_writable_directory "${DOCVAULT_OKF_BUNDLE_DIR}" "OKF bundle directory"
+
+# OKF bundle is optional; if it's a root-owned bind mount, don't fail the startup.
+if ! mkdir -p -- "${DOCVAULT_OKF_BUNDLE_DIR}" 2>/dev/null; then
+    echo "[entrypoint] WARNING: OKF bundle directory cannot be created (likely a root-owned bind mount). OKF features may be degraded." >&2
+elif [ ! -w "${DOCVAULT_OKF_BUNDLE_DIR}" ]; then
+    echo "[entrypoint] WARNING: OKF bundle directory is not writable." >&2
+fi
 
 case "${DOCVAULT_DATABASE_URL}" in
     sqlite:///*)

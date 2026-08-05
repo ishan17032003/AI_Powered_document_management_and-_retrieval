@@ -645,7 +645,10 @@ def prepare_runtime_directories(config: Settings) -> None:
 
     validate_startup(config)
     config.storage_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
-    config.okf_bundle_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
+    try:
+        config.okf_bundle_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
+    except OSError:
+        pass  # Ignore permission/creation errors if okf_bundle is a root-owned bind mount
 
 
 def main() -> int:
