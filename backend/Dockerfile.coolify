@@ -55,7 +55,7 @@ RUN chmod 0555 /usr/local/bin/docvault-process
 
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
-COPY okf_bundle/ ./okf_bundle/
+
 
 RUN mkdir -p \
         /data/storage \
