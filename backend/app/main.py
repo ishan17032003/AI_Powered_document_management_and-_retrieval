@@ -17,6 +17,7 @@ from .error_responses import (
     validation_error_handler,
 )
 from .middleware import LoginBodyLimitMiddleware, RequestCorrelationMiddleware
+from .model_warmup import warm_all_models
 from .request_body_limits import RequestBodyLimitMiddleware
 from .routers import access, admin, audit, auth, documents, duplicates, ingestions, system
 from .routers import search as search_router
@@ -56,9 +57,10 @@ def _startup() -> None:
     # migrate explicitly before any process can serve.
     assert_schema_compatible(settings.database_url)
     prepare_runtime_directories(settings)
-    
-    from .model_prefetch import prefetch_models
-    prefetch_models(settings.embedding_model, settings.reranker_model)
+    # Download (first boot) and load all pipeline models — BGE-M3, reranker,
+    # Docling, SigLIP2 — on background threads so the first user request never
+    # pays the download/cold-start cost while /ready stays green immediately.
+    warm_all_models()
 
 
 @app.exception_handler(ServiceError)

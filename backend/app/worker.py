@@ -15,6 +15,7 @@ from uuid import uuid4
 from .bootstrap import prepare_runtime_directories
 from .database import SessionLocal
 from .model_prefetch import prefetch_models
+from .model_warmup import warm_visual_semantic
 from .schema_compatibility import assert_schema_compatible
 from .runtime import settings
 from .services.ingestion_worker import run_next_job
@@ -29,6 +30,12 @@ def run(*, once: bool = False, poll_seconds: float = 1.0) -> int:
         embedding_model=settings.embedding_model,
         reranker_model=settings.reranker_model,
     )
+    # Warm the extraction/ingestion models on background threads so the first
+    # claimed job does not pay the Docling/SigLIP2 cold-start.
+    from .services.extraction_service import warm_docling
+
+    warm_docling()
+    warm_visual_semantic()
     owner = f"ingestion-worker-{os.getpid()}-{uuid4().hex[:8]}"
     while True:
         db = SessionLocal()

@@ -35,6 +35,11 @@ services:
         required: false     # App validation fails closed if production values are absent
     expose:
       - "8000"            # private service port; the frontend is the public ingress
+    ports:
+      # Local-only direct access for Swagger (/docs), curl and Postman. Bound to
+      # 127.0.0.1 so the API is never reachable from the network — the frontend
+      # remains the only public ingress.
+      - "127.0.0.1:8000:8000"
     environment:
       # ── Core ──
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-development}"
@@ -103,8 +108,11 @@ services:
       DOCVAULT_MINIO_BUCKET_PREFIX: "${DOCVAULT_MINIO_BUCKET_PREFIX:-docvault}"
     volumes:
       - docvault_db:/data          # SQLite DB + storage + OKF bundle
-      - lancedb_data:/data/lancedb # LanceDB tables on the host (visual semantic + shadow lanes)
-      - hf_cache:/hf_cache         # HuggingFace model weights (BGE-M3, reranker) — persisted across restarts
+      # Host bind-mounts. The defaults are relative to this compose file, so a
+      # fresh clone works anywhere without configuration. Override either var in
+      # .env with an absolute path to relocate the data (e.g. onto a larger disk).
+      - ${LANCEDB_HOST_PATH:-./lancedb}:/data/lancedb # LanceDB tables (visual semantic + shadow lanes)
+      - ${HF_CACHE_HOST_PATH:-./hf_cache}:/hf_cache   # HuggingFace model weights (BGE-M3, reranker)
       - ./backend/app:/app/app:ro  # Hot reload for backend source code
     secrets:
       - docvault_secret_key
@@ -167,8 +175,9 @@ services:
     entrypoint: ["python", "-m", "app.worker"]
     volumes:
       - docvault_db:/data
-      - lancedb_data:/data/lancedb
-      - hf_cache:/hf_cache
+      # Same host bind-mounts as the backend — see the note there.
+      - ${LANCEDB_HOST_PATH:-./lancedb}:/data/lancedb
+      - ${HF_CACHE_HOST_PATH:-./hf_cache}:/hf_cache
       - ./backend/app:/app/app:ro  # Mount source code for dev
     secrets:
       - docvault_secret_key
@@ -342,22 +351,10 @@ volumes:
   docvault_db:
     name: ddms_docvault_db
     driver: local
-  hf_cache:
-    # Host bind-mount: models are stored at ~/models/hf_cache on your machine.
-    # The worker downloads them on first boot and reuses them on restart.
-    # To force a re-download just delete the model sub-directory inside ~/models/hf_cache.
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${HF_CACHE_HOST_PATH:-/home/ishan-prasher/models/hf_cache}
-  lancedb_data:
-    # Host bind-mount so LanceDB tables are inspectable/backed up directly.
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${LANCEDB_HOST_PATH:-/home/ishan-prasher/Projects/devops/docker/rag/xenius_docvault/ai_doc_vault/lancedb_data}
+  # NOTE: hf_cache and lancedb_data are no longer named volumes. They are plain
+  # host bind-mounts declared directly on the backend/worker services, defaulting
+  # to ./hf_cache and ./lancedb next to this file. See ${HF_CACHE_HOST_PATH} and
+  # ${LANCEDB_HOST_PATH} in .env.example to point them elsewhere.
   qdrant_data:
     name: ddms_qdrant_data
     driver: local

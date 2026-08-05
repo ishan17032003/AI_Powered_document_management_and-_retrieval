@@ -223,16 +223,22 @@ def _ask_images(
     if not scope:
         return []
     try:
-        visual = visual_search_service.search(
-            db,
-            user,
-            query=question,
-            mode="text_to_image",
-            limit=_ASK_IMAGE_LIMIT,
-            allowed_ids=scope,
-        )
-        if visual.hits:
-            return visual.hits
+        # Only an explicitly visual question ranks figures against the query
+        # text. For anything else ("summarize X") the question's words say
+        # nothing about which figure matters and only reward incidental word
+        # overlap in OCR text, so the cited documents' own figures in page
+        # order are the honest choice.
+        if _has_visual_intent(question):
+            visual = visual_search_service.search(
+                db,
+                user,
+                query=question,
+                mode="text_to_image",
+                limit=_ASK_IMAGE_LIMIT,
+                allowed_ids=scope,
+            )
+            if visual.hits:
+                return visual.hits
         candidates = visual_search_repository.list_candidates(
             db,
             document_ids=frozenset(scope),

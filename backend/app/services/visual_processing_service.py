@@ -8,6 +8,7 @@ without changing asset lineage or the API contract.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -210,6 +211,88 @@ def _process_image(
         )
     )
     return 1, extracted
+
+
+def _markdown_embedded_images(text: str) -> list[tuple[str, str, bytes]]:
+    """Return (alt, subtype, payload) for each base64 data-URI image.
+
+    Markdown references external images by URL; those are never fetched (no
+    egress) and relative paths do not resolve inside the vault, so data URIs
+    are the only image bytes the file itself carries.  The installed CommonMark
+    parser (markdown-it-py, a Docling dependency) locates image nodes
+    structurally — the parser-function analogue of fitz for PDFs.
+    """
+    from markdown_it import MarkdownIt
+
+    results: list[tuple[str, str, bytes]] = []
+    for token in MarkdownIt("commonmark").parse(text):
+        for child in token.children or ():
+            if child.type != "image":
+                continue
+            src = str(child.attrGet("src") or "")
+            header, separator, encoded = src.partition(";base64,")
+            if not separator or not header.startswith("data:image/"):
+                continue
+            subtype = header[len("data:image/") :].lower()
+            if subtype not in {"png", "jpeg", "jpg", "gif", "webp"}:
+                continue
+            try:
+                payload = base64.b64decode(encoded, validate=True)
+            except ValueError:
+                continue
+            if payload:
+                results.append((child.content or "", subtype, payload))
+    return results
+
+
+def _process_markdown(
+    db: Session,
+    *,
+    document: models.Document,
+    version: models.DocVersion,
+    data: bytes,
+) -> tuple[int, int]:
+    """Register images a Markdown file embeds as base64 data URIs."""
+    assets = 0
+    extractions = 0
+    for alt, subtype, payload in _markdown_embedded_images(
+        data.decode("utf-8", errors="ignore")
+    ):
+        if assets >= settings.visual_max_assets_per_version:
+            break
+        try:
+            normalized = visual_assets.normalize_visual_derivative_isolated(
+                payload,
+                f"image/{'jpeg' if subtype == 'jpg' else subtype}",
+                output_format="PNG",
+                max_output_bytes=settings.max_upload_bytes,
+            )
+        except Exception:
+            # A corrupt or oversized embed must not fail the whole stage.
+            continue
+        file_key = _persist_derivative(normalized)
+        asset = visual_assets.register_asset(
+            db,
+            document_id=document.id,
+            version_id=version.id,
+            asset_type="IMAGE",
+            file_key=file_key,
+            content_type="image/png",
+            payload=normalized,
+            page_number=1,
+        )
+        assets += 1
+        extractions += int(
+            _register_extraction(
+                db,
+                asset=asset,
+                version=version,
+                document=document,
+                text=alt.strip() or document.title,
+                page_number=1,
+            )
+        )
+    return assets, extractions
 
 
 def _process_pdf(
@@ -417,7 +500,16 @@ def process_version_visuals(
         return VisualProcessingResult("disabled", mode="visual_search_disabled")
 
     content_type = version.content_type.split(";", 1)[0].strip().lower()
-    if not (content_type.startswith("image/") or content_type == "application/pdf"):
+    # Browsers declare .md inconsistently (text/markdown, text/plain, empty),
+    # so the filename decides alongside the content type.
+    is_markdown = content_type in {"text/markdown", "text/x-markdown"} or (
+        version.filename or ""
+    ).lower().endswith(".md")
+    if not (
+        content_type.startswith("image/")
+        or content_type == "application/pdf"
+        or is_markdown
+    ):
         return VisualProcessingResult("disabled", mode="unsupported_source")
 
     manifest = visual_assets.ensure_manifest(
@@ -456,6 +548,13 @@ def process_version_visuals(
         visual_assets.transition_manifest(db, manifest, stage="DERIVE", state="RUNNING")
         if content_type.startswith("image/"):
             assets, extractions = _process_image(
+                db,
+                document=document,
+                version=version,
+                data=data,
+            )
+        elif is_markdown:
+            assets, extractions = _process_markdown(
                 db,
                 document=document,
                 version=version,
