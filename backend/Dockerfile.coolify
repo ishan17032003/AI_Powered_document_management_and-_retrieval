@@ -20,7 +20,7 @@ COPY pyproject.toml uv.lock ./
 ENV UV_PROJECT_ENVIRONMENT="/opt/venv" \
     UV_PYTHON_DOWNLOADS="never" \
     UV_LINK_MODE="copy"
-RUN uv sync --frozen --no-dev --no-install-project --compile-bytecode
+RUN uv sync --frozen --no-dev --all-extras --no-install-project --compile-bytecode
 
 
 FROM python:3.12-slim AS runtime
@@ -71,6 +71,14 @@ RUN mkdir -p \
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod 0555 /entrypoint.sh
+
+# Download models so they are baked into the image.
+# We do this as root (since we are still root) so they are placed in the correct paths.
+COPY download_models_build.py /app/download_models_build.py
+ENV HF_HOME="/hf_cache" \
+    DOCVAULT_STORAGE_DIR="/data/storage"
+RUN python /app/download_models_build.py \
+    && chown -R 10001:10001 /data /hf_cache
 
 ENV DOCVAULT_DATABASE_URL="sqlite:////data/docvault.db" \
     DOCVAULT_DEBUG="false" \
