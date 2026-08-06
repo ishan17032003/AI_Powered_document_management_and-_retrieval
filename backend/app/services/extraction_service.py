@@ -34,13 +34,18 @@ from ..utils.request_context import bound_request_context, worker_context
 
 # Docling — layout-aware, structure-preserving parser (Tier 0 preferred path).
 try:
-    from docling.document_converter import DocumentConverter as _DoclingConverter, PdfFormatOption
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import (
         AcceleratorDevice,
         AcceleratorOptions,
         PdfPipelineOptions,
         RapidOcrOptions,
+    )
+    from docling.document_converter import (
+        DocumentConverter as _DoclingConverter,
+    )
+    from docling.document_converter import (
+        PdfFormatOption,
     )
 
     _HAS_DOCLING = True
@@ -60,9 +65,16 @@ def _rapidocr_artifacts(repo_dir: Path) -> tuple[Path, Path, Path, Path | None]:
 
     onnx_files = sorted(repo_dir.rglob("*.onnx"))
 
+    def _tokens(path: Path) -> set[str]:
+        # RapidOCR's downloader currently places files directly in the model
+        # root (for example ``PP-OCRv6_det_small.onnx``), while older bundles
+        # used ``.../det/...`` subdirectories.  Tokenize both path components
+        # and filenames so both layouts are accepted.
+        return set(re.findall(r"[a-z0-9]+", path.as_posix().lower()))
+
     def _find(kind: str) -> Path | None:
         return next(
-            (path for path in onnx_files if kind in {part.lower() for part in path.parts}),
+            (path for path in onnx_files if kind in _tokens(path)),
             None,
         )
 
@@ -73,7 +85,7 @@ def _rapidocr_artifacts(repo_dir: Path) -> tuple[Path, Path, Path, Path | None]:
         (
             path
             for path in sorted(repo_dir.rglob("*.txt"))
-            if "rec" in {part.lower() for part in path.parts}
+            if {"keys", "dict"} & _tokens(path) or "rec" in _tokens(path)
         ),
         None,
     )
@@ -99,9 +111,9 @@ def _ensure_rapidocr_artifacts(repo_dir: Path) -> tuple[Path, Path, Path, Path |
 
     try:
         import portalocker
+        import rapidocr
         import yaml
         from rapidocr import download_models
-        import rapidocr
     except ImportError as exc:  # pragma: no cover - depends on runtime extras
         raise RuntimeError("RapidOCR automatic downloader is unavailable") from exc
 
