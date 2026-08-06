@@ -147,8 +147,8 @@ class Settings(BaseSettings):
     visual_max_assets_per_version: int = Field(default=2_000, ge=1, le=100_000)
 
     # Semantic image/text retrieval is opt-in independently from the safe
-    # lexical visual lane.  The model is loaded only from an operator-provided
-    # local artifact; the API must never download weights at request time.
+    # lexical visual lane. When enabled, the startup warm-up downloads the
+    # pinned model into persistent storage; request handling remains local-only.
     visual_semantic_search_enabled: bool = False
     visual_semantic_ingestion_enabled: bool = False
     visual_semantic_model_path: Path | None = None

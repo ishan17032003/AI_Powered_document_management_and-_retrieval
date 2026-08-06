@@ -25,6 +25,7 @@ from .visual_embeddings import VisualEmbedding
 from .visual_semantic_embeddings import (
     Siglip2EmbeddingAdapter,
     VisualModelUnavailable,
+    artifact_sha256,
 )
 
 SEMANTIC_IMAGE_MANIFEST_LANE = "semantic_image"
@@ -75,13 +76,19 @@ def configured_adapter() -> Siglip2EmbeddingAdapter:
         return _test_adapter
     if not settings.visual_semantic_search_enabled and not settings.visual_semantic_ingestion_enabled:
         raise VisualModelUnavailable("semantic visual search is disabled")
-    model_path = settings.visual_semantic_model_path
-    if model_path is None or not settings.visual_semantic_model_sha256:
-        raise VisualModelUnavailable("semantic model artifact is not configured")
+    model_path = settings.visual_semantic_model_path or (
+        settings.storage_dir / "docvault-siglip2"
+    )
+    model_sha256 = settings.visual_semantic_model_sha256.strip()
+    if not model_sha256:
+        try:
+            model_sha256 = artifact_sha256(Path(model_path))
+        except VisualModelUnavailable as exc:
+            raise VisualModelUnavailable("semantic model artifact is not available") from exc
     key = (
         str(model_path),
         settings.visual_semantic_model_revision,
-        settings.visual_semantic_model_sha256.lower(),
+        model_sha256.lower(),
         settings.visual_semantic_dimension,
         settings.visual_semantic_device,
         settings.visual_semantic_max_batch,
@@ -91,7 +98,7 @@ def configured_adapter() -> Siglip2EmbeddingAdapter:
         _adapter = Siglip2EmbeddingAdapter(
             model_path=Path(model_path),
             model_revision=settings.visual_semantic_model_revision,
-            model_sha256=settings.visual_semantic_model_sha256,
+            model_sha256=model_sha256,
             dimension=settings.visual_semantic_dimension,
             device=settings.visual_semantic_device,
             max_batch=settings.visual_semantic_max_batch,

@@ -8,9 +8,8 @@ process start instead of on the first user request:
     loaded via search_service.warm_models()
   - Docling layout/table + RapidOCR artifacts — downloaded/loaded via
     extraction_service.warm_docling()
-  - SigLIP2 visual semantic model — loaded from the operator-staged,
-    digest-verified artifact directory. Never downloaded here: the API must
-    not fetch weights at runtime (supply-chain policy in config.py).
+  - SigLIP2 visual semantic model — downloaded once into the persistent,
+    digest-verified artifact directory when visual semantic features are enabled.
 
 Everything runs on daemon threads so the /ready healthcheck and the HTTP
 listener come up immediately while models provision behind it.
@@ -28,7 +27,7 @@ log = logging.getLogger(__name__)
 
 
 def warm_visual_semantic() -> None:
-    """Load SigLIP2 from the staged artifact and run one text forward pass.
+    """Provision and load SigLIP2, then run one text forward pass.
 
     Spawns a daemon thread; the ~40s CPU cold-start happens at boot instead
     of on the first visual search or ingestion job. Fails loudly in the log
@@ -60,7 +59,17 @@ def warm_visual_semantic() -> None:
                 operation="siglip2",
             )
             try:
+                from .services.visual_semantic_embeddings import ensure_siglip2_artifact
                 from .services.visual_semantic_service import configured_adapter
+
+                model_path = settings.visual_semantic_model_path or (
+                    settings.storage_dir / "docvault-siglip2"
+                )
+                ensure_siglip2_artifact(
+                    model_id=settings.visual_semantic_model_revision,
+                    model_path=model_path,
+                    expected_sha256=settings.visual_semantic_model_sha256,
+                )
 
                 adapter = configured_adapter()
                 adapter.embed_text(["warmup"])

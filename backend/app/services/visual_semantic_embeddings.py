@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import threading
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from time import monotonic
 from typing import Any, Protocol, Sequence
 
 from .visual_embeddings import VisualEmbedding
@@ -21,6 +23,71 @@ from .visual_embeddings import VisualEmbedding
 
 class VisualModelUnavailable(RuntimeError):
     """The semantic model cannot be used in the current runtime profile."""
+
+
+def ensure_siglip2_artifact(
+    *,
+    model_id: str,
+    model_path: Path,
+    expected_sha256: str = "",
+    lock_timeout_seconds: float = 1800.0,
+) -> tuple[Path, str]:
+    """Download SigLIP2 once into persistent storage and return its digest.
+
+    The worker calls this during startup, never from the request path.  A
+    filesystem lock protects the shared volume when the API and worker start
+    at the same time, and ``snapshot_download`` resumes safely after an
+    interrupted transfer.
+    """
+
+    if not model_id or len(model_id) > 160:
+        raise VisualModelUnavailable("semantic model identifier is invalid")
+    if expected_sha256 and (
+        len(expected_sha256) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in expected_sha256)
+    ):
+        raise VisualModelUnavailable("semantic model SHA-256 is invalid")
+    if os.getenv("DOCVAULT_SKIP_MODEL_PREFETCH", "").lower() in {"1", "true", "yes"}:
+        raise VisualModelUnavailable("semantic model prefetch is disabled")
+
+    try:
+        import portalocker
+        from huggingface_hub import snapshot_download
+    except Exception as exc:  # pragma: no cover - runtime dependency boundary
+        raise VisualModelUnavailable("semantic model download dependencies are unavailable") from exc
+
+    model_path = Path(model_path)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = model_path.parent / f".{model_path.name}.download.lock"
+    started = monotonic()
+    try:
+        with portalocker.Lock(str(lock_path), timeout=lock_timeout_seconds):
+            try:
+                digest = artifact_sha256(model_path)
+            except VisualModelUnavailable:
+                digest = ""
+            if digest:
+                if expected_sha256 and digest.lower() != expected_sha256.lower():
+                    raise VisualModelUnavailable("semantic model artifact digest mismatch")
+                return model_path, digest
+
+            model_path.mkdir(parents=True, exist_ok=True)
+            snapshot_download(
+                repo_id=model_id,
+                local_dir=str(model_path),
+                token=os.getenv("HF_TOKEN") or None,
+                local_files_only=False,
+            )
+            digest = artifact_sha256(model_path)
+            if expected_sha256 and digest.lower() != expected_sha256.lower():
+                raise VisualModelUnavailable("downloaded semantic model digest mismatch")
+            return model_path, digest
+    except VisualModelUnavailable:
+        raise
+    except Exception as exc:  # pragma: no cover - network/filesystem boundary
+        raise VisualModelUnavailable(
+            f"semantic model download failed after {monotonic() - started:.1f}s"
+        ) from exc
 
 
 class VisualEmbeddingBackend(Protocol):
@@ -92,8 +159,9 @@ class SemanticModelInfo:
 class Siglip2EmbeddingAdapter:
     """Lazy, local-only SigLIP 2 dual encoder.
 
-    ``model_path`` must point at a pre-staged Hugging Face model directory. The
-    adapter never downloads weights and never enables ``trust_remote_code``.
+    ``model_path`` must point at a Hugging Face model directory. Model
+    provisioning happens separately during startup; the adapter itself only
+    reads local files and never enables ``trust_remote_code``.
     """
 
     def __init__(
@@ -300,4 +368,5 @@ __all__ = [
     "VisualEmbeddingBackend",
     "VisualModelUnavailable",
     "artifact_sha256",
+    "ensure_siglip2_artifact",
 ]
