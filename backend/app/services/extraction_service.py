@@ -192,7 +192,7 @@ def _get_docling_converter():
                 # artifacts_path is used by Docling's own layout/table models
                 # (model.safetensors) AND as the fallback for RapidOCR when
                 # explicit paths are not yet available.
-                artifacts_path=_docling_artifacts_path,
+                artifacts_path=None,
                 ocr_options=_ocr_opts,
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.CPU,
