@@ -175,6 +175,7 @@ def _get_docling_converter():
             #
             _repo_dir = _docling_artifacts_path / "RapidOcr"
             _det, _cls, _rec, _keys = _ensure_rapidocr_artifacts(_repo_dir)
+            _font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
             _ocr_opts = RapidOcrOptions(
                 lang=["english"],
                 backend="onnxruntime",
@@ -182,6 +183,7 @@ def _get_docling_converter():
                 cls_model_path=str(_cls),
                 rec_model_path=str(_rec),
                 rec_keys_path=str(_keys) if _keys is not None else None,
+                font_path=str(_font_path) if _font_path.is_file() else None,
             )
 
             _pdf_pipeline_options = PdfPipelineOptions(
