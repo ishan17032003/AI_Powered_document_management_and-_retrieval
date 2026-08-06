@@ -51,6 +51,10 @@ def run(*, once: bool = False, poll_seconds: float = 1.0) -> int:
 
 
 def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="DocVault durable ingestion worker")
     parser.add_argument("--once", action="store_true", help="process at most one job")
     parser.add_argument("--poll-seconds", type=float, default=1.0)
