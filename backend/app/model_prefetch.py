@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import time
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +47,38 @@ def prefetch_models(embedding_model: str, reranker_model: str) -> None:
         return
 
     hf_home = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
-    log.info("model_prefetch: HF_HOME=%s", hf_home)
+    cache_path = Path(hf_home)
+    try:
+        cache_path.mkdir(parents=True, exist_ok=True)
+        stat = cache_path.stat()
+        usage = shutil.disk_usage(cache_path)
+        log.info(
+            "model_prefetch: HF_HOME=%s exists=%s writable=%s mode=%o "
+            "owner=%s:%s free_bytes=%s uid=%s gid=%s",
+            cache_path,
+            cache_path.exists(),
+            os.access(cache_path, os.W_OK),
+            stat.st_mode & 0o777,
+            stat.st_uid,
+            stat.st_gid,
+            usage.free,
+            os.getuid(),
+            os.getgid(),
+        )
+    except Exception:
+        log.exception("model_prefetch: unable to inspect or create HF_HOME=%s", cache_path)
 
     for model_id in (embedding_model, reranker_model):
         if not model_id:
+            log.info("model_prefetch: model setting is empty — skipping")
             continue
-        log.info("model_prefetch: ensuring %s is cached …", model_id)
+        started = time.monotonic()
+        log.info(
+            "model_prefetch: starting repo=%s cache=%s token_configured=%s",
+            model_id,
+            cache_path,
+            bool(os.getenv("HF_TOKEN")),
+        )
         try:
             local_path = snapshot_download(
                 repo_id=model_id,
@@ -60,14 +89,23 @@ def prefetch_models(embedding_model: str, reranker_model: str) -> None:
                 # Allow the download to resume if interrupted.
                 local_files_only=False,
             )
-            log.info("model_prefetch: %s ready at %s", model_id, local_path)
+            elapsed = time.monotonic() - started
+            local = Path(local_path)
+            log.info(
+                "model_prefetch: success repo=%s path=%s exists=%s elapsed_seconds=%.1f",
+                model_id,
+                local,
+                local.exists(),
+                elapsed,
+            )
         except Exception as exc:
             # Never crash the worker on a prefetch failure — the lazy loaders
             # in search_service.py will retry (or degrade gracefully) at query time.
-            log.warning(
-                "model_prefetch: could not prefetch %s (%s: %s) — "
-                "will attempt lazy download on first use",
+            log.exception(
+                "model_prefetch: failed repo=%s elapsed_seconds=%.1f "
+                "(%s: %s) — will attempt lazy download on first use",
                 model_id,
+                time.monotonic() - started,
                 type(exc).__name__,
                 exc,
             )
