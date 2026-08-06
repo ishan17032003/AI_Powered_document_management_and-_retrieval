@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import tempfile
 import unicodedata
 from dataclasses import dataclass, field
 from importlib import metadata
@@ -54,6 +55,86 @@ _docling_converter_checked: bool = False
 _docling_lock = None  # initialised below after threading is available
 
 
+def _rapidocr_artifacts(repo_dir: Path) -> tuple[Path, Path, Path, Path | None]:
+    """Return the downloaded RapidOCR model files under ``repo_dir``."""
+
+    onnx_files = sorted(repo_dir.rglob("*.onnx"))
+
+    def _find(kind: str) -> Path | None:
+        return next(
+            (path for path in onnx_files if kind in {part.lower() for part in path.parts}),
+            None,
+        )
+
+    det = _find("det")
+    cls = _find("cls")
+    rec = _find("rec")
+    keys = next(
+        (
+            path
+            for path in sorted(repo_dir.rglob("*.txt"))
+            if "rec" in {part.lower() for part in path.parts}
+        ),
+        None,
+    )
+    if det is None or cls is None or rec is None:
+        raise FileNotFoundError(
+            "RapidOCR download did not produce detector, classifier, and recognizer models"
+        )
+    return det, cls, rec, keys
+
+
+def _ensure_rapidocr_artifacts(repo_dir: Path) -> tuple[Path, Path, Path, Path | None]:
+    """Download RapidOCR models into the persistent volume when missing."""
+
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        artifacts = _rapidocr_artifacts(repo_dir)
+        logging.getLogger(__name__).info(
+            "rapidocr: using cached artifacts under %s", repo_dir
+        )
+        return artifacts
+    except FileNotFoundError:
+        pass
+
+    try:
+        import portalocker
+        import yaml
+        from rapidocr import download_models
+        import rapidocr
+    except ImportError as exc:  # pragma: no cover - depends on runtime extras
+        raise RuntimeError("RapidOCR automatic downloader is unavailable") from exc
+
+    lock_path = repo_dir.parent / ".rapidocr-download.lock"
+    with portalocker.Lock(str(lock_path), timeout=900):
+        try:
+            artifacts = _rapidocr_artifacts(repo_dir)
+            logging.getLogger(__name__).info(
+                "rapidocr: another process populated cached artifacts under %s", repo_dir
+            )
+            return artifacts
+        except FileNotFoundError:
+            pass
+
+        package_config = Path(rapidocr.__file__).with_name("config.yaml")
+        config = yaml.safe_load(package_config.read_text(encoding="utf-8"))
+        config.setdefault("Global", {})["model_root_dir"] = str(repo_dir)
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", prefix="docvault-rapidocr-", delete=False
+        ) as handle:
+            yaml.safe_dump(config, handle, sort_keys=False)
+            config_path = Path(handle.name)
+        try:
+            logging.getLogger(__name__).info(
+                "rapidocr: downloading missing artifacts into %s", repo_dir
+            )
+            download_models(config_path)
+        finally:
+            config_path.unlink(missing_ok=True)
+
+        return _rapidocr_artifacts(repo_dir)
+
+
 def _get_docling_converter():
     """Return a process-level DocumentConverter singleton (thread-safe lazy init)."""
     global _docling_converter, _docling_converter_checked, _docling_lock
@@ -80,41 +161,16 @@ def _get_docling_converter():
             # in the ai extra and works on every deployment, including those
             # without the visual extra (which is the only place torch lives).
             #
-            # Docling's RapidOcrModel resolves paths as:
-            #   artifacts_path / _model_repo_folder / <relative_path>
-            # where _model_repo_folder = "RapidOcr"
-            # and for onnxruntime/english the relative paths are:
-            #   onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx  (det)
-            #   onnx/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.onnx  (cls)
-            #   onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx  (rec)
-            #   paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt  (keys, shared)
             _repo_dir = _docling_artifacts_path / "RapidOcr"
-            _det = _repo_dir / "onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx"
-            _cls = _repo_dir / "onnx/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.onnx"
-            _rec = _repo_dir / "onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx"
-            _keys = _repo_dir / "paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt"
-
-            # Only provide explicit paths once all model files are on disk.
-            # With explicit paths, RapidOCR loads locally without any network
-            # traffic.  If files are missing (first run), artifacts_path drives
-            # the one-time download into the writable volume.
-            _ocr_opts: RapidOcrOptions
-            if _det.exists() and _cls.exists() and _rec.exists():
-                _ocr_opts = RapidOcrOptions(
-                    lang=["english"],
-                    backend="onnxruntime",
-                    det_model_path=str(_det),
-                    cls_model_path=str(_cls),
-                    rec_model_path=str(_rec),
-                    rec_keys_path=str(_keys) if _keys.exists() else None,
-                )
-            else:
-                # Models not yet staged — let artifacts_path drive the
-                # one-time download into the writable volume.
-                _ocr_opts = RapidOcrOptions(
-                    lang=["english"],
-                    backend="onnxruntime",
-                )
+            _det, _cls, _rec, _keys = _ensure_rapidocr_artifacts(_repo_dir)
+            _ocr_opts = RapidOcrOptions(
+                lang=["english"],
+                backend="onnxruntime",
+                det_model_path=str(_det),
+                cls_model_path=str(_cls),
+                rec_model_path=str(_rec),
+                rec_keys_path=str(_keys) if _keys is not None else None,
+            )
 
             _pdf_pipeline_options = PdfPipelineOptions(
                 do_ocr=True,
