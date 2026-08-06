@@ -52,7 +52,10 @@ x-backend-environment: &backend-environment
   DOCVAULT_LANCEDB_TEXT_VECTORS_ENABLED: "false"
   # Provision the retrieval models into the persistent /data volume on first
   # boot. The prefetcher is idempotent, so subsequent starts reuse the cache.
-  DOCVAULT_ENABLE_EMBEDDINGS: "${DOCVAULT_ENABLE_EMBEDDINGS:-true}"
+  # Keep vector indexing off in this profile: Qdrant and LanceDB vector
+  # columns are not enabled here. The model IDs remain configured so the
+  # prefetcher still downloads and caches the retrieval models.
+  DOCVAULT_ENABLE_EMBEDDINGS: "${DOCVAULT_ENABLE_EMBEDDINGS:-false}"
   DOCVAULT_EMBEDDING_MODEL: "${DOCVAULT_EMBEDDING_MODEL:-BAAI/bge-m3}"
   DOCVAULT_RERANKER_MODEL: "${DOCVAULT_RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}"
   DOCVAULT_USE_QDRANT: "false"
