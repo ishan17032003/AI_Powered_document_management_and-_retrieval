@@ -112,9 +112,14 @@ def _embed(texts: list[str]) -> tuple[list[list[float]], list[dict] | None]:
     if model is None:
         return [], None
     try:
-        # BGE-M3 native API.
+        # BGE-M3 native API with optimized batch_size and max_length for speed.
         output = model.encode(
-            texts, return_dense=True, return_sparse=True, return_colbert_vecs=False
+            texts,
+            batch_size=32,
+            max_length=512,
+            return_dense=True,
+            return_sparse=True,
+            return_colbert_vecs=False,
         )
         dense = output["dense_vecs"].tolist()
         # Convert sparse {token_id: weight} dicts to Qdrant SparseVector format.
@@ -127,7 +132,7 @@ def _embed(texts: list[str]) -> tuple[list[list[float]], list[dict] | None]:
     except Exception:
         try:
             # SentenceTransformer fallback — dense only.
-            dense = model.encode(texts, normalize_embeddings=True).tolist()
+            dense = model.encode(texts, batch_size=32, normalize_embeddings=True).tolist()
             return dense, None
         except Exception:
             return [], None
@@ -227,8 +232,21 @@ def index_vector(document_id: int, title: str, content: str) -> bool:
 
 
 def remove_vector(document_id: int) -> None:
-    """Best-effort Qdrant deletion, intended to run after the DB commit."""
+    """Best-effort Qdrant and LanceDB vector deletion, intended to run after the DB commit."""
     search_repository.remove_qdrant(document_id)
+    try:
+        if settings.lancedb_uri.exists():
+            if settings.lancedb_writer_enabled:
+                store = lancedb_service.writer_store()
+                store.delete_document(document_id)
+            else:
+                import lancedb
+                db_conn = lancedb.connect(str(settings.lancedb_uri))
+                if settings.lancedb_table_name in db_conn.table_names():
+                    table = db_conn.open_table(settings.lancedb_table_name)
+                    table.delete(f"document_id = {document_id}")
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to delete LanceDB vector chunks for document %s: %s", document_id, exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

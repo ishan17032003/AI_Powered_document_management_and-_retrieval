@@ -185,6 +185,7 @@ folder_chain(
         0
     FROM documents AS d
     JOIN folders AS f ON f.id = d.folder_id
+    WHERE d.lifecycle_state = 'ACTIVE'
 
     UNION ALL
 

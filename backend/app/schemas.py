@@ -308,9 +308,15 @@ class VisualFeedbackRequest(RequestModel):
 
 
 # ── Ask AI (RAG) ──────────────────────────────────────────────────────────────
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class AskQuery(RequestModel):
     question: str = Field(min_length=1, max_length=4000)
     document_id: int | None = Field(default=None, gt=0)
+    history: list[ChatMessage] | None = Field(default=None, max_length=20)
 
 
 class Citation(BaseModel):

@@ -12,6 +12,7 @@ import Ask from "./pages/Ask";
 import Repository from "./pages/Repository";
 import DocumentDetail from "./pages/DocumentDetail";
 import Duplicates from "./pages/Duplicates";
+import Trash from "./pages/Trash";
 import Audit from "./pages/Audit";
 import Admin from "./pages/Admin";
 
@@ -52,6 +53,7 @@ export default function App() {
                 <Route path="/ask" element={<Ask />} />
                 <Route path="/documents/:id" element={<DocumentDetail />} />
                 <Route path="/duplicates" element={<Duplicates />} />
+                <Route path="/trash" element={<Trash />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

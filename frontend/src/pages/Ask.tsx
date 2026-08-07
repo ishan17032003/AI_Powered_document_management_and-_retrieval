@@ -1,7 +1,7 @@
 import { Children, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Bot, FileText, Image as ImageIcon, Send, Sparkles, X } from "lucide-react";
+import { ArrowRight, Bot, FileText, Image as ImageIcon, Plus, Send, Sparkles, X } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { api, AskResponse, VisualSearchHit } from "../api";
 import { PageHeader, StatusPill } from "../components/ui";
@@ -58,8 +58,17 @@ function uniqueCitations(citations: AskResponse["citations"]) {
   });
 }
 
+const STORAGE_KEY = "docvault_ask_history";
+
 export default function Ask() {
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turns, setTurns] = useState<Turn[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
@@ -68,6 +77,19 @@ export default function Ask() {
   const createdPreviewUrls = useRef<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    try {
+      const toSave = turns
+        .filter((turn) => !turn.pending && turn.response)
+        .map((turn) => ({
+          id: turn.id,
+          question: turn.question,
+          response: turn.response,
+        }));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {}
+  }, [turns]);
 
   useEffect(() => {
     const thread = threadRef.current;
@@ -109,15 +131,34 @@ export default function Ask() {
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomed]);
 
+  function clearHistory() {
+    setTurns([]);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }
+
   async function run(value: string, documentId?: number) {
     const normalized = value.trim();
     if (!normalized || busy) return;
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     setBusy(true);
+
+    const historyPayload = turns
+      .filter((turn) => !turn.pending && turn.response?.answer)
+      .flatMap((turn) => [
+        { role: "user" as const, content: turn.question },
+        { role: "assistant" as const, content: turn.response!.answer },
+      ]);
+
     setTurns((current) => [...current, { id, question: normalized, pending: true }]);
 
     try {
-      const response = await api.ask(normalized, documentId);
+      const response = await api.ask(
+        normalized,
+        documentId,
+        historyPayload.length > 0 ? historyPayload : undefined
+      );
       setTurns((current) =>
         current.map((turn) =>
           turn.id === id ? { id, question: normalized, response } : turn
@@ -164,8 +205,23 @@ export default function Ask() {
       <PageHeader
         eyebrow="Grounded in your archive"
         title="Ask DocVault"
-        description="Get one concise answer from the text in documents you are allowed to view. For visual assets or rendered pages, use Search → Images or Pages."
-        actions={<StatusPill tone="success"><span className="status-dot" /> Sources included</StatusPill>}
+        description="Get one concise answer from the text in documents you are allowed to view. Context is preserved across your conversation turns."
+        actions={
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            {turns.length > 0 && (
+              <button
+                type="button"
+                className="button secondary is-small"
+                onClick={clearHistory}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+              >
+                <Plus size={15} />
+                New Conversation
+              </button>
+            )}
+            <StatusPill tone="success"><span className="status-dot" /> Sources included</StatusPill>
+          </div>
+        }
       />
 
       <section className="ask-workspace">

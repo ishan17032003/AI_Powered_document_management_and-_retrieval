@@ -274,6 +274,7 @@ def ask(
     question: str,
     allowed_ids: set[int] | None,
     document_id: int | None,
+    history: list[schemas.ChatMessage] | None = None,
     context: RequestContext | None = None,
 ) -> schemas.AskResponse:
     normalized = question.strip()
@@ -290,7 +291,12 @@ def ask(
     with bound_request_context(request_context):
         with trace_span("fusion", "rag_answer", context=request_context, document_id=document_id):
             result = rag_service.ask(
-                db, normalized, allowed_ids, document_id=document_id, user_id=user.id
+                db,
+                normalized,
+                allowed_ids,
+                document_id=document_id,
+                user_id=user.id,
+                history=history,
             )
         with trace_span("retrieval", "ask_images", context=request_context):
             images = _ask_images(

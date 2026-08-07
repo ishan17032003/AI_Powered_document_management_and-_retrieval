@@ -235,13 +235,14 @@ def claim_ingestion_job(
     owner = _owner(owner)
     lease_seconds = _lease(lease_seconds)
     now = now or datetime.now(timezone.utc)
+    expired_cutoff = now - timedelta(seconds=lease_seconds)
     available = (
         ((models.IngestionJob.state == "PENDING") &
          (models.IngestionJob.next_attempt_at.is_(None) |
           (models.IngestionJob.next_attempt_at <= now))) |
         ((models.IngestionJob.state == "RUNNING") &
          models.IngestionJob.locked_at.is_not(None) &
-         (models.IngestionJob.locked_at <= now))
+         (models.IngestionJob.locked_at <= expired_cutoff))
     )
     query = (
         select(models.IngestionJob)
@@ -254,8 +255,6 @@ def claim_ingestion_job(
     candidates = db.execute(query).scalars()
     job = next(iter(candidates), None)
     if job is None:
-        return None
-    if job.state == "RUNNING" and job.lock_owner not in (None, owner):
         return None
     result = db.execute(
         update(models.IngestionJob)

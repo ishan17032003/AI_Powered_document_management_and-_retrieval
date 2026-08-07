@@ -14,6 +14,7 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
+  Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const links = [
   { to: "/ask", label: "Ask AI", perm: "VIEW", icon: Bot },
   { to: "/upload", label: "Capture", perm: "CREATE", icon: UploadCloud },
   { to: "/duplicates", label: "Duplicates", perm: "VIEW", icon: Copy },
+  { to: "/trash", label: "Trash Bin", perm: "VIEW", icon: Trash2 },
   { to: "/audit", label: "Audit trail", perm: "VIEW_AUDIT", icon: ScrollText },
   { to: "/admin", label: "Users & access", perm: "ADMIN", icon: ShieldCheck },
 ];

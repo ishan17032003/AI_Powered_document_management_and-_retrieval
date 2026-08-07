@@ -305,13 +305,17 @@ def _get_client():
 # ── Local open-weight model via Ollama (Gemma etc.) ──────────────────────────
 
 
-def _answer_with_ollama(question: str, passages: list[Passage]) -> str | None:
+def _answer_with_ollama(
+    question: str,
+    passages: list[Passage],
+    history: list[dict[str, str]] | None = None,
+) -> str | None:
     destination = provider_destination("ollama")
     authorize_provider_destination("ollama", destination)
 
     body = {
         "model": settings.ollama_model,
-        "messages": _provider_messages(question, passages),
+        "messages": _provider_messages(question, passages, history),
         "stream": False,
         "keep_alive": "30m",  # keep the model resident to avoid cold-start latency
         "options": {
@@ -340,13 +344,17 @@ def _answer_with_ollama(question: str, passages: list[Passage]) -> str | None:
 # ── Local open-weight model via vLLM (OpenAI-compatible) ─────────────────────
 
 
-def _answer_with_vllm(question: str, passages: list[Passage]) -> str | None:
+def _answer_with_vllm(
+    question: str,
+    passages: list[Passage],
+    history: list[dict[str, str]] | None = None,
+) -> str | None:
     destination = provider_destination("vllm")
     authorize_provider_destination("vllm", destination)
 
     body = {
         "model": settings.vllm_model,
-        "messages": _provider_messages(question, passages),
+        "messages": _provider_messages(question, passages, history),
         "temperature": 0.2,
         "max_tokens": settings.rag_provider_max_output_tokens,
         # Guided decoding guarantees the answer/sources JSON envelope; open
@@ -377,13 +385,26 @@ def _accessible_docs(db: Session, allowed_ids: set[int] | None) -> list["Documen
 
 
 def _candidate_documents(db: Session, terms: list[str], allowed_ids: set[int] | None):
-    """Documents whose titles best match the query, as (doc, score), best first."""
+    """Documents whose titles or OCR content best match the query, best first."""
     if not terms:
         return []
-    scored = [
-        (d, _title_score(d.title, terms)) for d in _accessible_docs(db, allowed_ids)
-    ]
-    scored = [(d, s) for d, s in scored if s > 0]
+    distinctive_terms = [t for t in terms if len(t) > 2 and t not in _GENERIC_TITLE_TERMS]
+    search_terms = distinctive_terms if distinctive_terms else terms
+
+    docs = _accessible_docs(db, allowed_ids)
+    scored: list[tuple[Document, int]] = []
+    for d in docs:
+        t_score = _title_score(d.title, terms)
+        c_score = 0
+        if d.versions and d.versions[-1].ocr_text:
+            text_lower = d.versions[-1].ocr_text.lower()
+            for term in search_terms:
+                if term in text_lower:
+                    c_score += 1
+        total_score = t_score * 10 + c_score
+        if total_score > 0:
+            scored.append((d, total_score))
+
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored
 
@@ -494,29 +515,49 @@ _SYSTEM = (
 _UNTRUSTED_INPUT_SCHEMA = "docvault.rag-untrusted-input.v1"
 
 
-def _untrusted_user_content(question: str, passages: list[Passage]) -> str:
+def _untrusted_user_content(
+    question: str,
+    passages: list[Passage],
+    history: list[dict[str, str]] | None = None,
+) -> str:
     """Serialize retrieved evidence as data, never as provider instructions."""
+    payload: dict[str, object] = {
+        "schema": _UNTRUSTED_INPUT_SCHEMA,
+        "trust": "untrusted",
+        "document_excerpts": _build_context(passages),
+        "user_request": question,
+    }
+    if history:
+        payload["conversation_history"] = [
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in history
+            if isinstance(msg, dict) and "role" in msg and "content" in msg
+        ]
     return json.dumps(
-        {
-            "schema": _UNTRUSTED_INPUT_SCHEMA,
-            "trust": "untrusted",
-            "document_excerpts": _build_context(passages),
-            "user_request": question,
-        },
+        payload,
         ensure_ascii=False,
         separators=(",", ":"),
     )
 
 
-def _provider_messages(question: str, passages: list[Passage]) -> list[dict[str, str]]:
+def _provider_messages(
+    question: str,
+    passages: list[Passage],
+    history: list[dict[str, str]] | None = None,
+) -> list[dict[str, str]]:
     """Build the common two-role trust boundary for chat-style providers."""
     return [
         {"role": "system", "content": _SYSTEM},
-        {"role": "user", "content": _untrusted_user_content(question, passages)},
+        {"role": "user", "content": _untrusted_user_content(question, passages, history)},
     ]
 
 
-def _answer_with_claude(client, question: str, passages: list[Passage]) -> str | None:
+def _answer_with_claude(
+    client,
+    question: str,
+    passages: list[Passage],
+    history: list[dict[str, str]] | None = None,
+) -> str | None:
     authorize_provider_destination(
         "anthropic",
         provider_destination("anthropic"),
@@ -529,7 +570,7 @@ def _answer_with_claude(client, question: str, passages: list[Passage]) -> str |
             messages=[
                 {
                     "role": "user",
-                    "content": _untrusted_user_content(question, passages),
+                    "content": _untrusted_user_content(question, passages, history),
                 }
             ],
         )
@@ -620,6 +661,7 @@ def _compose(
     passages: list[Passage],
     scoped_id: int | None,
     caveat: str | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> Answer:
     summary_requested = is_summary(question)
     citations = validate_citations([
@@ -652,7 +694,7 @@ def _compose(
     total_timeout = settings.rag_provider_total_timeout_seconds
     if provider == "vllm":
         text = runner.run(
-            lambda: _answer_with_vllm(q, passages),
+            lambda: _answer_with_vllm(q, passages, history),
             total_timeout_seconds=total_timeout,
         )
         if text:
@@ -667,7 +709,7 @@ def _compose(
 
     elif provider == "ollama":
         text = runner.run(
-            lambda: _answer_with_ollama(q, passages),
+            lambda: _answer_with_ollama(q, passages, history),
             total_timeout_seconds=total_timeout,
         )
         if text:
@@ -686,7 +728,7 @@ def _compose(
             client = _get_client()
             if client is None:
                 return None
-            return _answer_with_claude(client, q, passages)
+            return _answer_with_claude(client, q, passages, history)
 
         text = runner.run(
             call_anthropic,
@@ -846,10 +888,28 @@ def ask(
     allowed_ids: set[int] | None,
     document_id: int | None = None,
     user_id: int | None = None,
+    history: list[dict[str, str]] | list[object] | None = None,
 ) -> Answer:
     limit = settings.rag_max_context_chars
 
+    history_dicts: list[dict[str, str]] = []
+    if history:
+        for item in history:
+            if hasattr(item, "role") and hasattr(item, "content"):
+                history_dicts.append({"role": getattr(item, "role"), "content": getattr(item, "content")})
+            elif isinstance(item, dict) and "role" in item and "content" in item:
+                history_dicts.append({"role": str(item["role"]), "content": str(item["content"])})
+
     terms = _query_terms(question)
+
+    # Extract terms from history to maintain conversational context
+    history_terms: list[str] = []
+    if history_dicts:
+        recent_text = " ".join(item.get("content", "") for item in history_dicts[-4:])
+        history_terms = [t for t in _query_terms(recent_text) if len(t) > 2]
+    
+    # Combined search terms for retrieval
+    combined_terms = list(dict.fromkeys(terms + history_terms))
 
     # ── 1. Hard-scoped request (user explicitly picked a document) ─────────────
     if document_id is not None:
@@ -857,9 +917,6 @@ def ask(
             return Answer(
                 answer="You don't have access to that document.", mode="extractive"
             )
-        # A request may race an ACL revoke after the router's prefilter.  Do
-        # not load or compose a scoped passage until the current exact set has
-        # confirmed the document one more time.
         if user_id is not None:
             current_allowed_ids = (
                 search_authorization.resolve_view_document_ids_for_user_id(db, user_id)
@@ -871,23 +928,34 @@ def ask(
         doc = rag_repository.get_document(db, document_id)
         if not doc:
             return Answer(answer="That document no longer exists.", mode="extractive")
-        passage = _doc_passage(doc, limit, terms)
-        if not passage:
+        
+        passages = _doc_windows(doc, _PER_DOC_CHARS, combined_terms or terms, _MAX_PASSAGES)
+        if not passages:
+            passage = _doc_passage(doc, limit, combined_terms or terms)
+            if passage:
+                passages = [passage]
+        if not passages:
             return Answer(
                 answer=f"'{doc.title}' has no extracted text to answer from.",
                 mode="extractive",
                 scoped_document_id=doc.id,
             )
-        passage.index = 1
+        for idx, p in enumerate(passages, start=1):
+            p.index = idx
+
         if user_id is not None:
             current_allowed_ids = (
                 search_authorization.resolve_view_document_ids_for_user_id(db, user_id)
             )
-            if passage.document_id not in current_allowed_ids:
+            if doc.id not in current_allowed_ids:
                 return Answer(
                     answer="You don't have access to that document.", mode="extractive"
                 )
-        return _compose(question, [passage], scoped_id=doc.id)
+        strict_caveat = (
+            f"STRICT DOCUMENT BOUNDARY: The user selected document '{doc.title}' (ID {doc.id}). "
+            "Answer ONLY based on the excerpts from this document. Do NOT invent facts or pull data from external sources."
+        )
+        return _compose(question, passages, scoped_id=doc.id, caveat=strict_caveat, history=history_dicts)
 
     # ── 2. Archive-wide summary: enumerate, don't retrieve ─────────────────────
     #
@@ -931,7 +999,7 @@ def ask(
     #   c) Number all passages sequentially and send them all to the LLM.
     #   d) Never ask the user to disambiguate — just answer from everything.
 
-    distinctive = [t for t in terms if len(t) > 2]
+    distinctive = [t for t in (combined_terms or terms) if len(t) > 2]
 
     passages: list[Passage] = []
     seen_ids: set[int] = set()
@@ -940,13 +1008,13 @@ def ask(
     # They don't consume numbered passage slots; they use the [OKF] tag.
     rag_slot_limit = _MAX_PASSAGES
 
-    # a) Title-matched documents (boost by relevance score, highest first).
-    for doc, _score in _candidate_documents(db, terms, allowed_ids):
+    # a) Content and title matched documents (boosted by relevance score, highest first).
+    for doc, _score in _candidate_documents(db, combined_terms or terms, allowed_ids):
         if len(passages) >= rag_slot_limit:
             break
         if doc.id in seen_ids:
             continue
-        for p in _doc_windows(doc, _PER_DOC_CHARS, terms, rag_slot_limit - len(passages)):
+        for p in _doc_windows(doc, _PER_DOC_CHARS, combined_terms or terms, rag_slot_limit - len(passages)):
             p.index = len(passages) + 1
             passages.append(p)
             seen_ids.add(doc.id)

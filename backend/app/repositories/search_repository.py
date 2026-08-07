@@ -285,4 +285,7 @@ def get_documents(
         return []
     return db.query(models.Document).options(
         joinedload(models.Document.doc_class), selectinload(models.Document.versions)
-    ).filter(models.Document.id.in_(document_ids)).all()
+    ).filter(
+        models.Document.id.in_(document_ids),
+        models.Document.lifecycle_state == "ACTIVE",
+    ).all()

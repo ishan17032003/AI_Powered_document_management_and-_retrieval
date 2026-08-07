@@ -521,13 +521,13 @@ export default function Repository() {
 
       <ConfirmDialog
         open={!!pendingDelete}
-        title="Delete this document?"
+        title="Move to Trash?"
         description={
           pendingDelete
-            ? `"${pendingDelete.title}" and its stored versions will be removed. This action cannot be undone.`
+            ? `"${pendingDelete.title}" will be moved to the Trash Bin. Its vectors and search index will be removed immediately so it cannot be used in Ask AI or Search. You can restore or permanently delete it anytime from Trash.`
             : ""
         }
-        confirmLabel="Delete document"
+        confirmLabel="Move to Trash"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
         busy={deleting}

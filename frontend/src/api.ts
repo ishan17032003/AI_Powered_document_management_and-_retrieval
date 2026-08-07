@@ -141,6 +141,11 @@ export interface SearchResponse {
   hits: SearchHit[];
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AskResponse {
   question: string;
   answer: string;
@@ -363,8 +368,12 @@ export const api = {
   stats: () => req<Stats>("/admin/stats"),
   ragStatus: () => req<RagStatus>("/status"),
   listDocuments: () => req<DocSummary[]>("/documents"),
+  listTrash: () => req<DocSummary[]>("/documents/trash"),
   getDocument: (id: number) => req<DocDetail>(`/documents/${id}`),
   deleteDocument: (id: number) => req<void>(`/documents/${id}`, { method: "DELETE" }),
+  restoreDocument: (id: number) => req<DocSummary>(`/documents/${id}/restore`, { method: "POST" }),
+  purgeDocument: (id: number) => req<void>(`/documents/${id}/purge`, { method: "DELETE" }),
+  emptyTrash: () => req<void>("/documents/trash/empty", { method: "DELETE" }),
   upload: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -426,11 +435,11 @@ export const api = {
     req<IngestionStatus>(`/ingestions/${encodeURIComponent(jobId)}/retry`, { method: "POST" }),
   cancelIngestion: (jobId: string) =>
     req<IngestionStatus>(`/ingestions/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }),
-  ask: (question: string, document_id?: number) =>
+  ask: (question: string, document_id?: number, history?: ChatMessage[]) =>
     req<AskResponse>("/search/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, document_id: document_id ?? null }),
+      body: JSON.stringify({ question, document_id: document_id ?? null, history: history ?? null }),
     }),
   duplicates: () => req<DupGroup[]>("/duplicates"),
   resolveDup: (groupId: number, primary: number) =>

@@ -17,7 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
-from sqlalchemy import update
+from sqlalchemy import update, delete
 
 from .. import models, schemas
 from ..config import settings
@@ -1195,6 +1195,138 @@ def delete_document(
         raise
 
     search_service.remove_vector(document_id)
+
+
+def list_trash_documents(
+    db: Session,
+    *,
+    limit: int = 100,
+) -> list[schemas.DocumentSummary]:
+    documents = document_repository.list_tombstoned(db, limit=limit)
+    return [_summary(document) for document in documents]
+
+
+def restore_document(
+    db: Session,
+    user: models.User,
+    document_id: int,
+    *,
+    context: RequestContext | None = None,
+) -> schemas.DocumentSummary:
+    document = db.get(models.Document, document_id)
+    if document is None:
+        raise NotFoundError("Document not found")
+    if document.lifecycle_state != "TOMBSTONED":
+        raise ConflictError("Document is not in trash")
+
+    document.lifecycle_state = "ACTIVE"
+    document.deleted_at = None
+    document.status = "READY"
+    document.failure_code = None
+    for version in document.versions:
+        version.storage_state = "AVAILABLE"
+
+    audit_service.record(
+        db,
+        actor=user,
+        action="RESTORE",
+        object_type="document",
+        object_id=document_id,
+        details={"restored": True},
+        context=context,
+    )
+    db.commit()
+
+    import logging
+    try:
+        latest = document.latest_version
+        if latest and latest.ocr_text:
+            search_service.index_document(db, document.id, document.title, latest.ocr_text)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to re-index restored document %s: %s", document_id, exc)
+
+    return _summary(document)
+
+
+def purge_tombstoned_document(
+    db: Session,
+    user: models.User,
+    document_id: int,
+    *,
+    context: RequestContext | None = None,
+) -> None:
+    document = db.get(models.Document, document_id)
+    if document is None:
+        return
+    if document.lifecycle_state != "TOMBSTONED":
+        raise ConflictError("Only tombstoned documents can be purged")
+
+    file_keys = [version.file_key for version in document.versions if version.file_key]
+    version_ids = [version.id for version in document.versions]
+
+    try:
+        # Delete ingestion jobs referencing document
+        db.execute(delete(models.IngestionJob).where(models.IngestionJob.document_id == document_id))
+
+        # Delete duplicate group relationships
+        duplicate_repository.delete_members_for_documents(db, {document_id})
+        group_ids = duplicate_repository.primary_group_ids(db, document_id)
+        if group_ids:
+            duplicate_repository.delete_members_for_groups(db, group_ids)
+            duplicate_repository.delete_groups(db, group_ids)
+
+        # Delete outbox events
+        db.execute(delete(models.OutboxEvent).where(models.OutboxEvent.aggregate_id == str(document_id)))
+
+        # Delete visual extractions and processing manifests
+        if version_ids:
+            db.execute(delete(models.VisualExtraction).where(models.VisualExtraction.version_id.in_(version_ids)))
+            db.execute(delete(models.VisualProcessingManifest).where(models.VisualProcessingManifest.version_id.in_(version_ids)))
+
+        assets = db.query(models.VisualAsset.id).filter(models.VisualAsset.document_id == document_id).all()
+        asset_ids = [a[0] for a in assets]
+        if asset_ids:
+            db.execute(delete(models.VisualAssetLineage).where(
+                (models.VisualAssetLineage.asset_id.in_(asset_ids)) |
+                (models.VisualAssetLineage.source_asset_id.in_(asset_ids))
+            ))
+            db.execute(delete(models.VisualAsset).where(models.VisualAsset.id.in_(asset_ids)))
+
+        # Delete versions, metadata, and document
+        db.execute(delete(models.DocMetadata).where(models.DocMetadata.document_id == document_id))
+        search_repository.remove_document(db, document_id)
+        for version in list(document.versions):
+            db.delete(version)
+        db.delete(document)
+
+        audit_service.record(
+            db,
+            actor=user,
+            action="PURGE",
+            object_type="document",
+            object_id=document_id,
+            details={"purged": True},
+            context=context,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    for key in file_keys:
+        if key and document_repository.active_references_for_key(db, file_key=key) == 0:
+            file_storage.delete_file(key)
+
+
+def empty_trash(
+    db: Session,
+    user: models.User,
+    *,
+    context: RequestContext | None = None,
+) -> None:
+    tombstoned = document_repository.list_tombstoned(db, limit=500)
+    for doc in tombstoned:
+        purge_tombstoned_document(db, user, doc.id, context=context)
 
 
 def move_document(

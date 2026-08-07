@@ -192,6 +192,24 @@ def list_documents_cursor(
     )
 
 
+@router.get("/trash", response_model=list[schemas.DocumentSummary])
+def list_trash_documents(
+    user: models.User = Depends(require("VIEW")),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    return document_service.list_trash_documents(db, limit=limit)
+
+
+@router.delete("/trash/empty", status_code=status.HTTP_204_NO_CONTENT)
+def empty_trash(
+    user: models.User = Depends(require("DELETE")),
+    db: Session = Depends(get_db),
+):
+    document_service.empty_trash(db, user)
+    return None
+
+
 @router.get("/{doc_id}", response_model=schemas.DocumentDetail)
 def get_document(
     doc_id: Annotated[int, Path(ge=1)],
@@ -246,6 +264,31 @@ def delete_document(
             doc_id,
             context=context,
         )
+    return None
+
+
+@router.post("/{doc_id}/restore", response_model=schemas.DocumentSummary)
+def restore_document(
+    doc_id: Annotated[int, Path(ge=1)],
+    request: Request,
+    user: models.User = Depends(require("DELETE")),
+    db: Session = Depends(get_db),
+):
+    context = get_request_context(request)
+    with bound_request_context(context):
+        return document_service.restore_document(db, user, doc_id, context=context)
+
+
+@router.delete("/{doc_id}/purge", status_code=status.HTTP_204_NO_CONTENT)
+def purge_document(
+    doc_id: Annotated[int, Path(ge=1)],
+    request: Request,
+    user: models.User = Depends(require("DELETE")),
+    db: Session = Depends(get_db),
+):
+    context = get_request_context(request)
+    with bound_request_context(context):
+        document_service.purge_tombstoned_document(db, user, doc_id, context=context)
     return None
 
 

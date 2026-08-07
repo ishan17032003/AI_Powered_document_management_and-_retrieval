@@ -140,3 +140,21 @@ def delete_metadata(db: Session, document_id: int) -> None:
 
 def delete(db: Session, document: models.Document) -> None:
     db.delete(document)
+
+
+def list_tombstoned(
+    db: Session,
+    *,
+    limit: int = 100,
+) -> list[models.Document]:
+    return (
+        db.query(models.Document)
+        .options(
+            joinedload(models.Document.doc_class),
+            selectinload(models.Document.versions),
+        )
+        .filter(models.Document.lifecycle_state == "TOMBSTONED")
+        .order_by(models.Document.deleted_at.desc(), models.Document.id.desc())
+        .limit(limit)
+        .all()
+    )

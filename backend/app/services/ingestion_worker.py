@@ -400,6 +400,7 @@ def run_next_job(db: Session, *, owner: str | None = None) -> models.IngestionJo
     claimed = job_repository.claim_ingestion_job(db, owner=owner or f"ingestion-{uuid4().hex}")
     if claimed is None:
         return None
+    db.commit()
     return run_claimed_job(db, claimed)
 
 

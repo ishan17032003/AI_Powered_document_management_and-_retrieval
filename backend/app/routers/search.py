@@ -234,6 +234,7 @@ def ask(
         question=payload.question,
         allowed_ids=set(search_authorization.resolve_view_document_ids(db, user)),
         document_id=payload.document_id,
+        history=payload.history,
         context=get_request_context(request),
     )
 
