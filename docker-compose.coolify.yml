@@ -77,7 +77,7 @@ x-backend-security: &backend-security
     - ALL
   security_opt:
     - no-new-privileges:true
-  read_only: true
+  read_only: false
   tmpfs:
     - /tmp:noexec,nosuid,size=64m
 
@@ -122,6 +122,9 @@ services:
     image: *backend-image
     <<: *backend-security
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       <<: *backend-environment
     volumes:
@@ -145,6 +148,9 @@ services:
     <<: *backend-security
     restart: unless-stopped
     entrypoint: ["python", "-m", "app.worker"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       <<: *backend-environment
       DOCVAULT_LANCEDB_WRITER_ENABLED: "true"

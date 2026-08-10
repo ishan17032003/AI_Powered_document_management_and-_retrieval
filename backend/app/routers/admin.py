@@ -271,35 +271,84 @@ def update_vllm_url(
     actor: models.User = Depends(require_global("ADMIN")),
 ):
     """Update the active vLLM URL dynamically and persist it to .env."""
-    from ..runtime import settings
-    from ..config import BASE_DIR
+    import json
+    import os
     import re
     from pathlib import Path as FilePath
+    from urllib.parse import urlsplit
+    from ..config import BASE_DIR
+    from ..runtime import settings
 
-    # Update in-memory settings
-    settings.vllm_url = payload.vllm_url
-
-    # Persist to .env (prefer /data/.env for Docker/Coolify persistence)
-    data_env_path = FilePath("/data/.env")
-    env_path = data_env_path if FilePath("/data").is_dir() else BASE_DIR.parent / ".env"
-    
-    if env_path.exists():
-        content = env_path.read_text(encoding="utf-8")
-    else:
-        content = ""
-
-    if re.search(r"^DOCVAULT_VLLM_URL=.*$", content, re.MULTILINE):
-        content = re.sub(
-            r"^DOCVAULT_VLLM_URL=.*$",
-            f"DOCVAULT_VLLM_URL={payload.vllm_url}",
-            content,
-            flags=re.MULTILINE,
+    parsed = urlsplit(payload.vllm_url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid vLLM URL format: must include http or https scheme and a host",
         )
-    else:
-        if not content.endswith("\n") and content:
-            content += "\n"
-        content += f"DOCVAULT_VLLM_URL={payload.vllm_url}\n"
-    
-    env_path.write_text(content, encoding="utf-8")
 
-    return schemas.VllmUrlOut(vllm_url=settings.vllm_url)
+    hostname = parsed.hostname.rstrip(".").lower()
+
+    # Update in-memory settings and set host allowlist to only the new host
+    settings.vllm_url = payload.vllm_url
+    allowed_hosts_list = [hostname]
+    settings.llm_allowed_hosts = allowed_hosts_list
+    allowed_hosts_json = json.dumps(allowed_hosts_list)
+
+    os.environ["DOCVAULT_VLLM_URL"] = payload.vllm_url
+    os.environ["DOCVAULT_LLM_ALLOWED_HOSTS"] = allowed_hosts_json
+
+    # Write dynamic runtime overrides for instant multi-process worker resolution
+    runtime_payload = json.dumps(
+        {
+            "vllm_url": payload.vllm_url,
+            "llm_allowed_hosts": allowed_hosts_list,
+        }
+    )
+    for rpath in (FilePath("/data/vllm_runtime.json"), FilePath("/tmp/vllm_runtime.json")):
+        try:
+            rpath.write_text(runtime_payload, encoding="utf-8")
+        except Exception:
+            pass
+
+    # Persist to all accessible .env locations (/data/.env, project .env, etc.)
+    target_env_paths = [
+        FilePath("/data/.env"),
+        BASE_DIR.parent / ".env",
+        FilePath("/app/.env"),
+        FilePath(".env"),
+    ]
+    for env_path in target_env_paths:
+        try:
+            if not env_path.parent.exists():
+                continue
+            content = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+
+            if re.search(r"^DOCVAULT_VLLM_URL=.*$", content, re.MULTILINE):
+                content = re.sub(
+                    r"^DOCVAULT_VLLM_URL=.*$",
+                    f"DOCVAULT_VLLM_URL={payload.vllm_url}",
+                    content,
+                    flags=re.MULTILINE,
+                )
+            else:
+                if content and not content.endswith("\n"):
+                    content += "\n"
+                content += f"DOCVAULT_VLLM_URL={payload.vllm_url}\n"
+
+            if re.search(r"^DOCVAULT_LLM_ALLOWED_HOSTS=.*$", content, re.MULTILINE):
+                content = re.sub(
+                    r"^DOCVAULT_LLM_ALLOWED_HOSTS=.*$",
+                    f"DOCVAULT_LLM_ALLOWED_HOSTS={allowed_hosts_json}",
+                    content,
+                    flags=re.MULTILINE,
+                )
+            else:
+                if content and not content.endswith("\n"):
+                    content += "\n"
+                content += f"DOCVAULT_LLM_ALLOWED_HOSTS={allowed_hosts_json}\n"
+
+            env_path.write_text(content, encoding="utf-8")
+        except Exception:
+            pass
+
+    return schemas.VllmUrlOut(vllm_url=payload.vllm_url)

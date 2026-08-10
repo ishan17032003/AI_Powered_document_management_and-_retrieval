@@ -27,7 +27,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    read_only: true
+    read_only: false
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
     env_file:
@@ -113,7 +113,8 @@ services:
       # .env with an absolute path to relocate the data (e.g. onto a larger disk).
       - ${LANCEDB_HOST_PATH:-./lancedb}:/data/lancedb # LanceDB tables (visual semantic + shadow lanes)
       - ${HF_CACHE_HOST_PATH:-./hf_cache}:/hf_cache   # HuggingFace model weights (BGE-M3, reranker)
-      - ./backend/app:/app/app:ro  # Hot reload for backend source code
+      - ./backend/app:/app/app     # Hot reload for backend source code
+      - ./.env:/app/.env           # Mount host .env file for dynamic admin settings persistence
     secrets:
       - docvault_secret_key
     networks:
@@ -149,7 +150,8 @@ services:
       - path: .env
         required: false
     environment:
-      DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-production}"
+      PYTHONUNBUFFERED: "1"
+      DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-development}"
       DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"
       DOCVAULT_STORAGE_DIR: "/data/storage"
       DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"

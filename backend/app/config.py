@@ -149,8 +149,8 @@ class Settings(BaseSettings):
     # Semantic image/text retrieval is opt-in independently from the safe
     # lexical visual lane. When enabled, the startup warm-up downloads the
     # pinned model into persistent storage; request handling remains local-only.
-    visual_semantic_search_enabled: bool = False
-    visual_semantic_ingestion_enabled: bool = False
+    visual_semantic_search_enabled: bool = True
+    visual_semantic_ingestion_enabled: bool = True
     visual_semantic_model_path: Path | None = None
     visual_semantic_model_revision: str = "google/siglip2-base-patch16-224"
     visual_semantic_model_sha256: str = ""
