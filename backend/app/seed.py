@@ -90,6 +90,20 @@ def seed_demo_database(
     try:
         permissions = bootstrap_catalog_service.ensure_permissions(db)
         roles = bootstrap_catalog_service.ensure_roles(db, permissions)
+        
+        # Ensure groups for roles exist
+        for role_name in roles:
+            group = db.query(models.Group).filter(models.Group.name == role_name).first()
+            if not group:
+                group = models.Group(
+                    name=role_name,
+                    description=f"Group for {role_name} role",
+                    is_active=True,
+                    created_by=1
+                )
+                db.add(group)
+        db.flush()
+
         for identity in DEMO_IDENTITIES:
             user = (
                 db.query(models.User)
@@ -135,6 +149,23 @@ def seed_demo_database(
                             effect="ALLOW",
                         )
                     )
+                
+                # Sync group membership
+                group = db.query(models.Group).filter(models.Group.name == role.name).first()
+                if group:
+                    membership = db.query(models.GroupMembership).filter(
+                        models.GroupMembership.group_id == group.id,
+                        models.GroupMembership.user_id == user.id
+                    ).first()
+                    if not membership:
+                        db.add(
+                            models.GroupMembership(
+                                group_id=group.id,
+                                user_id=user.id,
+                                created_by=1
+                            )
+                        )
+                
                 # Demo identities are deliberately provisioned with explicit
                 # global ACL rows as well as their capability bundle.  This is
                 # development/test data only; production bootstrap never calls

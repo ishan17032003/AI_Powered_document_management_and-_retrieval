@@ -293,3 +293,57 @@ def list_all_doc_rules(
             )
         )
     return result
+
+@router.get(
+    "/all-group-doc-rules",
+    response_model=list[schemas.AllGroupDocRuleOut],
+    summary="List every DOC-scoped access rule for groups",
+)
+def list_all_group_doc_rules(
+    actor: models.User = Depends(require_global("ADMIN")),
+    db: Session = Depends(get_db),
+) -> list[schemas.AllGroupDocRuleOut]:
+    from sqlalchemy import select as _select
+
+    stmt = (
+        _select(models.AccessRule, models.Document, models.Group)
+        .join(
+            models.Document,
+            (models.AccessRule.scope_id == models.Document.id)
+            & (models.AccessRule.scope_type == "DOC"),
+        )
+        .join(
+            models.Group,
+            models.AccessRule.group_id == models.Group.id,
+        )
+        .where(
+            models.AccessRule.scope_type == "DOC",
+            models.AccessRule.group_id.is_not(None),
+        )
+        .order_by(models.Group.name, models.Document.title, models.AccessRule.created_at.desc())
+        .limit(1000)
+    )
+
+    rows = db.execute(stmt).all()
+
+    result: list[schemas.AllGroupDocRuleOut] = []
+    for rule, doc, group in rows:
+        doc_class_name: str | None = None
+        if doc.doc_class is not None:
+            doc_class_name = doc.doc_class.name
+        result.append(
+            schemas.AllGroupDocRuleOut(
+                rule_id=rule.id,
+                group_id=group.id,
+                group_name=group.name,
+                doc_id=doc.id,
+                doc_title=doc.title,
+                doc_class=doc_class_name,
+                effect=rule.effect,
+                permission=rule.permission.code,
+                reason=rule.reason,
+                is_active=rule.is_active,
+                created_at=rule.created_at,
+            )
+        )
+    return result

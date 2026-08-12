@@ -616,6 +616,13 @@ mark {
   background: var(--primary-dark);
 }
 
+.button.compact {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 34px;
+  gap: 5px;
+}
+
 .button.secondary {
   border-color: var(--line-strong);
   background: var(--surface);
@@ -2410,11 +2417,378 @@ mark {
 
 /* Users and access */
 
-/* ── Access Control Matrix ──────────────────────────────────────── */
+/* ── Access Control Matrix — Dual-Mode ──────────────────────────── */
 
 .acm-card {
   margin-bottom: 0;
 }
+
+.acm-card-full {
+  /* Full-width unified card */
+}
+
+/* ── Header row ─────────────────────────────────────────────────── */
+
+.acm-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.acm-header-left {
+  display: grid;
+  gap: 2px;
+}
+
+.acm-header-left h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+}
+
+/* ── Mode toggle ─────────────────────────────────────────────────── */
+
+.acm-mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.acm-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.acm-mode-btn + .acm-mode-btn {
+  border-left: 1px solid var(--line-strong);
+}
+
+.acm-mode-btn:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.acm-mode-btn.is-active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* ── Section divider ─────────────────────────────────────────────── */
+
+.acm-section-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
+}
+
+/* ── Sub-heading ─────────────────────────────────────────────────── */
+
+.acm-sub-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Role mode body ──────────────────────────────────────────────── */
+
+.acm-role-mode-body,
+.acm-user-mode-body {
+  animation: acm-fade-in 0.18s ease;
+}
+
+@keyframes acm-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Role chips ──────────────────────────────────────────────────── */
+
+.acm-role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.acm-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+
+.acm-role-chip:hover {
+  border-color: var(--primary);
+  color: var(--ink);
+}
+
+.acm-role-chip.is-active {
+  font-weight: 700;
+}
+
+.acm-role-chip-name {
+  /* inherits parent */
+}
+
+.acm-role-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--line-strong);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  transition: background 0.14s, color 0.14s;
+}
+
+/* ── Role badge (inline label) ───────────────────────────────────── */
+
+.acm-role-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.acm-role-doc-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ── Add Document bar ────────────────────────────────────────────── */
+
+.acm-add-doc-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.acm-add-doc-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.acm-add-doc-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acm-add-doc-select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  min-width: 240px;
+  outline: none;
+}
+
+.acm-add-doc-select:focus {
+  border-color: var(--primary);
+}
+
+/* ── Document card grid (Role Mode) ─────────────────────────────── */
+
+.acm-doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.acm-doc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  transition: background 0.14s, border-color 0.14s, transform 0.14s;
+}
+
+.acm-doc-card:hover {
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
+.acm-doc-card-icon {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.acm-doc-card-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.acm-doc-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.acm-doc-card-class {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acm-doc-card-meta {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.acm-doc-card-revoke {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s, border-color 0.13s;
+}
+
+.acm-doc-card-revoke:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.acm-doc-card-revoke:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+/* ── Role permissions row ────────────────────────────────────────── */
+
+.acm-role-perms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+/* ── Collapsible Create User button ─────────────────────────────── */
+
+.acm-collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s;
+  text-align: left;
+}
+
+.acm-collapsible-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.acm-collapsible-header:hover {
+  background: var(--surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ── Create User form ────────────────────────────────────────────── */
+
+.acm-create-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  animation: acm-fade-in 0.16s ease;
+}
+
+.acm-create-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.acm-create-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Existing ACM table (user mode document list) ────────────────── */
 
 .acm-search-wrap {
   display: flex;
@@ -2540,6 +2914,225 @@ mark {
   font-size: 10px;
   color: var(--muted);
   font-style: italic;
+}
+
+/* ── User search bar ─────────────────────────────────────────────── */
+
+.acm-user-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  transition: border-color 0.14s;
+}
+
+.acm-user-search-wrap:focus-within {
+  border-color: var(--primary);
+}
+
+.acm-user-search {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+}
+
+.acm-user-search::placeholder {
+  color: var(--muted);
+}
+
+.acm-search-clear {
+  display: flex;
+  align-items: center;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.acm-search-clear:hover {
+  color: var(--ink);
+}
+
+/* ── Role pills inside user rows ─────────────────────────────────── */
+
+.acm-user-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.acm-role-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.acm-role-pill.is-empty {
+  opacity: 0.5;
+  font-style: italic;
+  font-weight: 400;
+  font-family: var(--font-body);
+}
+
+/* ── User document access table (udoc-table) ─────────────────────── */
+
+.udoc-table {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.udoc-header {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 100px 110px 1fr;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
+}
+
+.udoc-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 100px 110px 1fr;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  align-items: center;
+  transition: background 0.1s;
+}
+
+.udoc-row:hover {
+  background: var(--surface-soft);
+}
+
+.udoc-row.is-allowed {
+  background: rgba(68, 199, 168, 0.04);
+}
+
+.udoc-row.is-denied {
+  background: rgba(240, 107, 120, 0.04);
+}
+
+.udoc-doc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.udoc-doc span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.udoc-class {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.udoc-status {
+  display: flex;
+  align-items: center;
+}
+
+.udoc-no-rule {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.udoc-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.udoc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.udoc-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.udoc-btn.allow {
+  background: var(--success-soft);
+  border-color: rgba(68, 199, 168, 0.3);
+  color: var(--success);
+}
+
+.udoc-btn.allow:hover:not(:disabled) {
+  background: rgba(68, 199, 168, 0.2);
+  border-color: var(--success);
+}
+
+.udoc-btn.deny {
+  background: var(--danger-soft);
+  border-color: rgba(240, 107, 120, 0.3);
+  color: var(--danger);
+}
+
+.udoc-btn.deny:hover:not(:disabled) {
+  background: rgba(240, 107, 120, 0.2);
+  border-color: var(--danger);
+}
+
+.udoc-btn.revoke {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+
+.udoc-btn.revoke:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: rgba(240, 107, 120, 0.5);
+  color: var(--danger);
 }
 
 .admin-right-col {
@@ -4211,3 +4804,526 @@ mark {
 .spin {
   animation: spin 0.75s linear infinite;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ACM USER MODE — ACCORDION REDESIGN (v2)
+   New: expandable user rows with inline document management panels
+════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Top bar (search + new user btn) ─────────────────────────────── */
+
+.acm-user-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.acm-user-topbar .acm-user-search-wrap {
+  flex: 1;
+}
+
+/* ── Expandable user list container ──────────────────────────────── */
+
+.acm-expandable-user-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+/* ── Individual expandable user row ──────────────────────────────── */
+
+.acm-user-expand-row {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-soft);
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+
+.acm-user-expand-row.is-expanded {
+  border-color: var(--primary-dark);
+  box-shadow: 0 0 0 1px rgba(118, 146, 255, 0.18);
+}
+
+/* ── User row header (the clickable part) ─────────────────────────── */
+
+.acm-user-expand-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.acm-user-expand-header:hover {
+  background: rgba(118, 146, 255, 0.04);
+}
+
+.acm-user-expand-row.is-expanded .acm-user-expand-header {
+  background: rgba(118, 146, 255, 0.06);
+  border-bottom: 1px solid var(--line);
+}
+
+.acm-expand-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: color 0.14s;
+}
+
+.acm-user-expand-row.is-expanded .acm-expand-chevron {
+  color: var(--primary);
+}
+
+/* ── Expanded document panel ──────────────────────────────────────── */
+
+.acm-user-doc-panel {
+  padding: 14px 16px;
+  animation: acm-fade-in 0.15s ease;
+}
+
+/* ── Lock notice (SA/Admin) ───────────────────────────────────────── */
+
+.acm-locked-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(247, 123, 90, 0.07);
+  border: 1px solid rgba(247, 123, 90, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+.acm-locked-notice svg {
+  color: #f77b5a;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Grant access search bar ─────────────────────────────────────── */
+
+.acm-doc-grant-bar {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.acm-doc-grant-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  transition: border-color 0.14s;
+}
+
+.acm-doc-grant-input-wrap:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(118, 146, 255, 0.12);
+}
+
+.acm-doc-grant-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+
+.acm-doc-grant-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── Grant search results dropdown ───────────────────────────────── */
+
+.acm-doc-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--primary-dark);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  max-height: 280px;
+  overflow-y: auto;
+  animation: acm-fade-in 0.12s ease;
+}
+
+.acm-doc-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--graphite);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.acm-doc-search-item:last-child {
+  border-bottom: none;
+}
+
+.acm-doc-search-item:hover:not(:disabled) {
+  background: rgba(118, 146, 255, 0.08);
+  color: var(--ink);
+}
+
+.acm-doc-search-item:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+.acm-doc-search-item svg:first-child {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.acm-doc-search-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acm-doc-search-class {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  padding: 1px 5px;
+  background: var(--surface-soft);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.acm-doc-search-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--primary-soft);
+}
+
+.acm-doc-search-empty {
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Accessible docs list ─────────────────────────────────────────── */
+
+.acm-user-accessible-docs {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.acm-user-doc-list-header {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 100px 90px 90px;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
+}
+
+.acm-user-doc-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 100px 90px 90px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  align-items: center;
+  transition: background 0.1s;
+  font-size: 12px;
+}
+
+.acm-user-doc-row:first-of-type {
+  border-top: none;
+}
+
+.acm-user-doc-row:hover {
+  background: rgba(118, 146, 255, 0.04);
+}
+
+.acm-user-doc-row.source-role {
+  /* subtle green left border for role-inherited */
+  border-left: 2px solid rgba(68, 199, 168, 0.35);
+  padding-left: 10px;
+}
+
+.acm-user-doc-row.source-user {
+  /* subtle blue left border for user-explicit */
+  border-left: 2px solid rgba(118, 146, 255, 0.45);
+  padding-left: 10px;
+}
+
+.acm-user-doc-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--graphite);
+  overflow: hidden;
+}
+
+.acm-user-doc-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acm-user-doc-class {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acm-user-doc-source {
+  display: flex;
+  align-items: center;
+}
+
+.acm-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.acm-source-badge.role {
+  background: rgba(68, 199, 168, 0.12);
+  border: 1px solid rgba(68, 199, 168, 0.3);
+  color: #44c7a8;
+}
+
+.acm-source-badge.user {
+  background: rgba(118, 146, 255, 0.12);
+  border: 1px solid rgba(118, 146, 255, 0.3);
+  color: #7692ff;
+}
+
+.acm-user-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.acm-role-locked-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── Empty state for expanded panel ──────────────────────────────── */
+
+.acm-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 16px;
+  gap: 6px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.acm-panel-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--graphite);
+}
+
+.acm-panel-empty small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Role mode: lock tag + card lock ─────────────────────────────── */
+
+.acm-lock-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(247, 123, 90, 0.1);
+  border: 1px solid rgba(247, 123, 90, 0.3);
+  color: #f77b5a;
+}
+
+.acm-doc-card.is-locked {
+  border-color: rgba(247, 123, 90, 0.2);
+  background: rgba(247, 123, 90, 0.04);
+}
+
+.acm-doc-card-lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: rgba(247, 123, 90, 0.5);
+}
+
+.acm-role-panel {
+  margin-top: 14px;
+  animation: acm-fade-in 0.16s ease;
+}
+
+.acm-role-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ── Password checklist ───────────────────────────────────────────── */
+
+.acm-pwd-checklist {
+  padding: 12px 14px;
+  background: rgba(118, 146, 255, 0.06);
+  border: 1px solid rgba(118, 146, 255, 0.18);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--graphite);
+}
+
+.acm-pwd-checklist strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.acm-pwd-checklist ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.acm-pwd-checklist li {
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.acm-pwd-checklist li.ok {
+  color: var(--success);
+}
+
+.acm-pwd-checklist li.fail {
+  color: var(--danger);
+}
+
+.acm-role-caps {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.acm-role-caps summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+
+.acm-role-caps summary:hover {
+  color: var(--ink);
+}
+
+/* ── Sub-heading utility ─────────────────────────────────────────── */
+
+.acm-sub-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+
+/* ── User-deny row styling ───────────────────────────────────────── */
+
+.acm-user-doc-row.source-user-deny {
+  border-left: 2px solid rgba(240, 107, 120, 0.5);
+  padding-left: 10px;
+  background: rgba(240, 107, 120, 0.03);
+}
+
+.acm-source-badge.denied {
+  background: rgba(240, 107, 120, 0.12);
+  border: 1px solid rgba(240, 107, 120, 0.3);
+  color: var(--danger);
+}
+
+/* ── Deny-for-user button ────────────────────────────────────────── */
+
+.udoc-btn.deny-user {
+  background: rgba(240, 107, 120, 0.06);
+  border-color: rgba(240, 107, 120, 0.3);
+  color: var(--danger);
+}
+
+.udoc-btn.deny-user:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+/* ── Restore button ──────────────────────────────────────────────── */
+
+.udoc-btn.restore {
+  background: var(--success-soft);
+  border-color: rgba(68, 199, 168, 0.35);
+  color: var(--success);
+}
+
+.udoc-btn.restore:hover:not(:disabled) {
+  background: rgba(68, 199, 168, 0.2);
+  border-color: var(--success);
+}
+

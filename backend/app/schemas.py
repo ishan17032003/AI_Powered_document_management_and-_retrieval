@@ -19,6 +19,11 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class RoleGroupMap(BaseModel):
+    role_name: str
+    group_id: int
+
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -525,3 +530,16 @@ class VllmUrlUpdate(RequestModel):
 class VllmUrlOut(BaseModel):
     """Response containing the updated vLLM URL."""
     vllm_url: str
+
+class AllGroupDocRuleOut(BaseModel):
+    rule_id: int
+    group_id: int
+    group_name: str
+    doc_id: int
+    doc_title: str
+    doc_class: str | None
+    effect: str
+    permission: str
+    reason: str | None
+    is_active: bool
+    created_at: datetime

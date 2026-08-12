@@ -68,6 +68,17 @@ def reprocess_document(
     return _job_out(job)
 
 
+@router.get("/role-groups", response_model=list[schemas.RoleGroupMap])
+def get_role_groups(actor: models.User = Depends(require_global("ADMIN")), db: Session = Depends(get_db)):
+    # Join roles and groups by name to return the mapping
+    from sqlalchemy import select
+    stmt = select(models.Role.name, models.Group.id).join(
+        models.Group, models.Role.name == models.Group.name
+    )
+    rows = db.execute(stmt).all()
+    return [schemas.RoleGroupMap(role_name=row.name, group_id=row.id) for row in rows]
+
+
 @router.get("/users", response_model=list[schemas.UserAdminOut])
 def list_users(
     user: models.User = Depends(require("ADMIN")),

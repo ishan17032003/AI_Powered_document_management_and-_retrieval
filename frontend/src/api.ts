@@ -95,6 +95,16 @@ export interface AllDocRule extends UserDocRule {
   user_username: string;
 }
 
+export interface AllGroupDocRule extends UserDocRule {
+  group_id: number;
+  group_name: string;
+}
+
+export interface RoleGroupMap {
+  role_name: string;
+  group_id: number;
+}
+
 export interface DocSummary {
   id: number;
   title: string;
@@ -365,6 +375,9 @@ export const api = {
     req<UserDocRule[]>(`/access/user/${userId}/doc-rules`),
   listAllDocRules: () =>
     req<AllDocRule[]>(`/access/all-doc-rules`),
+  listAllGroupDocRules: () =>
+    req<AllGroupDocRule[]>(`/access/all-group-doc-rules`),
+  getRoleGroups: () => req<RoleGroupMap[]>("/admin/role-groups"),
   stats: () => req<Stats>("/admin/stats"),
   ragStatus: () => req<RagStatus>("/status"),
   listDocuments: () => req<DocSummary[]>("/documents"),

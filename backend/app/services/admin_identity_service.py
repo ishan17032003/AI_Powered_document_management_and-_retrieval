@@ -79,6 +79,36 @@ def create_user(
     db.add(target)
     db.flush()
     db.add(models.Assignment(user_id=target.id, role_id=role.id, scope_type="GLOBAL", effect="ALLOW"))
+    
+    if role.name == "Super Admin":
+        permissions = db.query(models.Permission).all()
+        for p in permissions:
+            db.add(
+                models.AccessRule(
+                    principal_type="USER",
+                    user_id=target.id,
+                    group_id=None,
+                    permission_id=p.id,
+                    scope_type="GLOBAL",
+                    scope_id=None,
+                    effect="ALLOW",
+                    inherits=True,
+                    is_active=True,
+                    expires_at=None,
+                    reason="Global grant for Super Admin",
+                    created_by=actor.id,
+                )
+            )
+
+    # Sync group membership for the assigned role
+    group = db.query(models.Group).filter(models.Group.name == role.name).first()
+    if group:
+        db.add(models.GroupMembership(
+            group_id=group.id,
+            user_id=target.id,
+            created_by=actor.id
+        ))
+
     _audit(db, actor, target, "ADMIN_USER_CREATED", context)
     db.commit()
     db.refresh(target)
@@ -103,6 +133,51 @@ def assign_role(db: Session, actor: models.User, user_id: int, role_name: str, *
     existing = db.query(models.Assignment).filter(models.Assignment.user_id == target.id, models.Assignment.role_id == role.id, models.Assignment.scope_type == "GLOBAL", models.Assignment.scope_id.is_(None), models.Assignment.effect == "ALLOW").first()
     if existing is None:
         db.add(models.Assignment(user_id=target.id, role_id=role.id, scope_type="GLOBAL", effect="ALLOW"))
+        
+        if role.name == "Super Admin":
+            permissions = db.query(models.Permission).all()
+            for p in permissions:
+                # Check if a rule already exists
+                rule_exists = db.query(models.AccessRule).filter(
+                    models.AccessRule.principal_type == "USER",
+                    models.AccessRule.user_id == target.id,
+                    models.AccessRule.permission_id == p.id,
+                    models.AccessRule.scope_type == "GLOBAL",
+                    models.AccessRule.scope_id.is_(None),
+                    models.AccessRule.effect == "ALLOW"
+                ).first()
+                if not rule_exists:
+                    db.add(
+                        models.AccessRule(
+                            principal_type="USER",
+                            user_id=target.id,
+                            group_id=None,
+                            permission_id=p.id,
+                            scope_type="GLOBAL",
+                            scope_id=None,
+                            effect="ALLOW",
+                            inherits=True,
+                            is_active=True,
+                            expires_at=None,
+                            reason="Global grant for Super Admin",
+                            created_by=actor.id,
+                        )
+                    )
+
+        # Sync group membership for the assigned role
+        group = db.query(models.Group).filter(models.Group.name == role.name).first()
+        if group:
+            membership = db.query(models.GroupMembership).filter(
+                models.GroupMembership.group_id == group.id,
+                models.GroupMembership.user_id == target.id
+            ).first()
+            if not membership:
+                db.add(models.GroupMembership(
+                    group_id=group.id,
+                    user_id=target.id,
+                    created_by=actor.id
+                ))
+
     _audit(db, actor, target, "ADMIN_ROLE_ASSIGNED", context)
     db.commit()
     return target
