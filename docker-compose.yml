@@ -75,6 +75,13 @@ services:
       DOCVAULT_ANTHROPIC_API_KEY: "${DOCVAULT_ANTHROPIC_API_KEY:-}"
       DOCVAULT_ANTHROPIC_URL: "${DOCVAULT_ANTHROPIC_URL:-https://api.anthropic.com}"
       DOCVAULT_RAG_MODEL: "${DOCVAULT_RAG_MODEL:-claude-opus-4-8}"
+      # ── MongoDB (Ask AI conversation persistence) ──
+      DOCVAULT_MONGODB_URL: "mongodb://${MONGO_ROOT_USER:-mongoadmin}:${MONGO_ROOT_PASSWORD:-mongoadmin}@mongodb:27017/ask_ai?authSource=admin"
+      # ── Google OAuth (for Drive integration) ──
+      DOCVAULT_GOOGLE_CLIENT_ID: "${DOCVAULT_GOOGLE_CLIENT_ID:-617551129683-iakfnf5osk1oee12fh4p60o1oqhprkpa.apps.googleusercontent.com}"
+      DOCVAULT_GOOGLE_CLIENT_SECRET: "${DOCVAULT_GOOGLE_CLIENT_SECRET:-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}"
+      DOCVAULT_GOOGLE_REDIRECT_URI: "${DOCVAULT_GOOGLE_REDIRECT_URI:-http://localhost:8080/api/auth/callback}"
+
       # ── RAG pipeline (local default uses the SQLite FTS5 fallback) ──
       DOCVAULT_USE_QDRANT: "${DOCVAULT_USE_QDRANT:-false}"
       # In-network service DNS; the host-facing URL in .env only applies to
@@ -87,7 +94,7 @@ services:
       # ── Docling (layout-aware parsing) ──
       DOCVAULT_USE_DOCLING: "${DOCVAULT_USE_DOCLING:-true}"
       # ── CORS (allow the Nginx frontend + Vite dev server) ──
-      DOCVAULT_CORS_ORIGINS: '${DOCVAULT_CORS_ORIGINS:-["http://localhost", "http://localhost:80", "http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://frontend"]}'
+      DOCVAULT_CORS_ORIGINS: '${DOCVAULT_CORS_ORIGINS:-["http://localhost", "http://localhost:80", "http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://frontend"]}'
       # ── Gunicorn ──
       GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
       # ── HuggingFace model cache (BGE-M3 + reranker) ──
@@ -120,6 +127,11 @@ services:
     networks:
       - docvault-net
       - docvault-data-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-m", "app.container_healthcheck", "--ready"]
       interval: 30s
@@ -186,6 +198,8 @@ services:
     depends_on:
       backend:
         condition: service_started
+      mongodb:
+        condition: service_healthy
     networks:
       - docvault-data-net
     healthcheck:
@@ -310,6 +324,27 @@ services:
       retries: 5
 
 
+  # ── MongoDB (Ask AI conversation persistence) ─────────────────────────────
+  mongodb:
+    image: "mongo:7"
+    container_name: docvault-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ask_ai
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_ROOT_USER:-mongoadmin}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:-mongoadmin}"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - docvault-data-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 20s
+      timeout: 10s
+      start_period: 20s
+      retries: 5
+
+
   # ── React + Nginx frontend ──────────────────────────────────────────────────
   frontend:
     build:
@@ -326,8 +361,7 @@ services:
       - /var/run:noexec,nosuid,size=1m
       - /tmp:noexec,nosuid,size=8m
     ports:
-      - "80:80"           # main entry point for users
-      - "5173:5173"       # Vite HMR port
+      - "8080:5173"       # Main entry point for users at http://localhost:8080
     environment:
       VITE_API_TARGET: "http://backend:8000"
       CHOKIDAR_USEPOLLING: "true"
@@ -364,6 +398,9 @@ volumes:
     driver: local
   minio_data:
     name: ddms_minio_data
+    driver: local
+  mongodb_data:
+    name: ddms_mongodb_data
     driver: local
 
 

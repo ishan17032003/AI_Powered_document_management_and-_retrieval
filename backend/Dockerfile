@@ -79,8 +79,7 @@ RUN chmod 0555 /usr/local/bin/docvault-process
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 
-# Copy OKF bundle seed files (copied to volume on first boot by entrypoint.sh).
-COPY okf_bundle/ ./okf_bundle/
+# Copy OKF bundle seed files (copied to vlume on first boot by entrypoint.sh).
 
 # ── Persistent data volumes ───────────────────────────────────────────────────
 # These are mounted at runtime via docker-compose volumes so data survives

@@ -11,9 +11,10 @@ import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-DEFAULT_MAX_CHARS = 2_000
-DEFAULT_OVERLAP_CHARS = 200
+DEFAULT_MAX_CHARS = 3_500
+DEFAULT_OVERLAP_CHARS = 350
 CHUNKER_VERSION = "docling-deterministic-v1"
+
 
 
 @dataclass(frozen=True, slots=True)

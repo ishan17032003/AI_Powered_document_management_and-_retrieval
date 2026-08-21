@@ -365,11 +365,15 @@ class _LanceHybridTextStore:
         snippets: dict[int, list[str]] = {}
         # Vector lane first: its top chunk is the semantically closest text and
         # becomes the document's primary snippet for reranking/display.
-        for lane in (vector, bm25):
+        # The vector lane gets a 1.5× semantic boost so dense-similarity matches
+        # rank above pure lexical hits when both lanes contribute to RRF fusion.
+        _SEMANTIC_BOOST = 1.5
+        for lane_idx, lane in enumerate((vector, bm25)):
+            boost = _SEMANTIC_BOOST if lane_idx == 0 else 1.0
             for rank, hit in enumerate(lane, start=1):
                 document_id = hit["document_id"]
                 entry = fused.setdefault(document_id, {**hit, "score": 0.0})
-                entry["score"] += 1.0 / (self._RRF_K + rank)
+                entry["score"] += boost / (self._RRF_K + rank)
                 snippet = str(hit.get("snippet") or "")
                 if snippet and snippet not in snippets.setdefault(document_id, []):
                     snippets[document_id].append(snippet)

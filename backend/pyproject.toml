@@ -26,6 +26,8 @@ dependencies = [
     "python-pptx>=1,<2",
     "pyyaml>=6,<7",
     "minio>=7.2,<8",
+    "motor>=3.6,<4",
+    "google-auth-oauthlib>=1.2,<2",
     "psycopg[binary]>=3,<4",
     "sqlalchemy>=2,<3",
     "uvicorn[standard]>=0.30,<1",
@@ -36,6 +38,8 @@ dependencies = [
 # are opt-in for local development and lightweight CI jobs.
 ai = [
     "anthropic>=0.40,<1",
+    "openai>=1.0,<2",
+    "google-generativeai>=0.8,<1",
     "docling[rapidocr]>=2,<3",  # includes rapidocr + onnxruntime OCR backend
     "onnxruntime>=1.20,<2",     # explicit pin — used by Docling's RapidOCR engine
     "flagembedding>=1.2,<2",

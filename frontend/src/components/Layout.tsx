@@ -5,10 +5,12 @@ import {
   Bell,
   Bot,
   ChevronUp,
+  Cloud,
   Copy,
   FileSearch,
   FolderArchive,
   LayoutDashboard,
+  LogOut,
   Menu,
   Plus,
   ScrollText,
@@ -18,6 +20,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import { api, GoogleDriveStatus } from "../api";
 import { useAuth } from "../auth";
 import Brand from "./Brand";
 import ThemeToggle from "./ThemeToggle";
@@ -49,6 +52,63 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 959px)").matches);
   const [globalQuery, setGlobalQuery] = useState("");
+  const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false, email: null });
+  const [driveLoading, setDriveLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      api.googleDriveStatus().then(setDriveStatus).catch(() => {});
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const handleOAuthMsg = (evt: MessageEvent) => {
+      if (evt.data && evt.data.type === "GOOGLE_DRIVE_OAUTH") {
+        if (evt.data.success) {
+          api.googleDriveStatus().then(setDriveStatus).catch(() => {});
+        } else if (evt.data.message) {
+          alert(`Google Drive connection error: ${evt.data.message}`);
+        }
+      }
+    };
+    window.addEventListener("message", handleOAuthMsg);
+    return () => window.removeEventListener("message", handleOAuthMsg);
+  }, []);
+
+
+  async function handleConnectDrive() {
+    setDriveLoading(true);
+    try {
+      const res = await api.googleDriveConnect();
+      if (res.auth_url) {
+        const width = 600;
+        const height = 700;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+        window.open(
+          res.auth_url,
+          "GoogleDriveOAuth",
+          `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+        );
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to initiate Google Drive connection");
+    } finally {
+      setDriveLoading(false);
+    }
+  }
+
+  async function handleDisconnectDrive() {
+    setDriveLoading(true);
+    try {
+      await api.googleDriveDisconnect();
+      setDriveStatus({ connected: false, email: null });
+    } catch (err: any) {
+      alert(err.message || "Failed to disconnect Google Drive");
+    } finally {
+      setDriveLoading(false);
+    }
+  }
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 959px)");
@@ -126,7 +186,54 @@ export default function Layout({ children }: { children: ReactNode }) {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
             >
-              <button onClick={logout}>Sign out</button>
+              <div className="user-menu-section" style={{ padding: "0.6rem 0.75rem", borderBottom: "1px solid var(--border, rgba(255,255,255,0.08))" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted, #888)" }}>
+                    Google Drive
+                  </span>
+                  {driveStatus.connected ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.72rem", color: "#10b981" }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#10b981" }} />
+                      Connected
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: "0.72rem", color: "var(--muted, #888)" }}>Not connected</span>
+                  )}
+                </div>
+                {driveStatus.connected ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    {driveStatus.email && (
+                      <span style={{ fontSize: "0.78rem", color: "var(--fg, #eee)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {driveStatus.email}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="button secondary is-small"
+                      onClick={handleDisconnectDrive}
+                      disabled={driveLoading}
+                      style={{ width: "100%", justifyContent: "center", fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+                    >
+                      Disconnect Drive
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="button secondary is-small"
+                    onClick={handleConnectDrive}
+                    disabled={driveLoading}
+                    style={{ width: "100%", justifyContent: "center", fontSize: "0.75rem", padding: "0.25rem 0.5rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                  >
+                    <Cloud size={14} />
+                    Connect Google Drive
+                  </button>
+                )}
+              </div>
+              <button onClick={logout} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", width: "100%", padding: "0.6rem 0.75rem" }}>
+                <LogOut size={15} />
+                <span>Sign out</span>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>

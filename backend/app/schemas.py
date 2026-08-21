@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class RequestModel(BaseModel):
@@ -322,6 +322,17 @@ class AskQuery(RequestModel):
     question: str = Field(min_length=1, max_length=4000)
     document_id: int | None = Field(default=None, gt=0)
     history: list[ChatMessage] | None = Field(default=None, max_length=20)
+    # Conversational session management
+    conversation_id: str | None = Field(default=None, max_length=64)
+    company_kb_enabled: bool = True
+    google_drive_enabled: bool = False
+
+    @model_validator(mode="after")
+    def _ensure_source_selection(self) -> "AskQuery":
+        # At least one source must be selected; if neither is selected, default company KB to True
+        if not self.company_kb_enabled and not self.google_drive_enabled:
+            self.company_kb_enabled = True
+        return self
 
 
 class Citation(BaseModel):
@@ -335,16 +346,82 @@ class Candidate(BaseModel):
     title: str
 
 
+class ScopedDocumentInfo(BaseModel):
+    document_id: int
+    title: str
+
+
+class ScopedClassInfo(BaseModel):
+    class_id: int
+    class_name: str
+    document_ids: list[int] = Field(default_factory=list)
+
+
+class ActiveScopeInfo(BaseModel):
+    documents: list[ScopedDocumentInfo] = Field(default_factory=list)
+    classes: list[ScopedClassInfo] = Field(default_factory=list)
+
+
+class DriveSourceCitation(BaseModel):
+    id: str | None = None
+    name: str | None = None
+    mimeType: str | None = None
+    webViewLink: str = ""
+    matched_keywords: list[str] = Field(default_factory=list)
+    snippet: str = ""
+
+
 class AskResponse(BaseModel):
     question: str
     answer: str
-    mode: str  # claude | extractive | clarify
+    mode: str  # claude | extractive | clarify | gdrive | combined
     model: str | None = None
     needs_clarification: bool = False
     scoped_document_id: int | None = None
     citations: list[Citation] = Field(default_factory=list)
     candidates: list[Candidate] = Field(default_factory=list)
     images: list[VisualSearchHit] = Field(default_factory=list)
+    # New session & scope metadata
+    conversation_id: str | None = None
+    active_scope: ActiveScopeInfo | None = None
+    sources_used: dict[str, bool] | None = None
+    drive_sources: list[DriveSourceCitation] | None = None
+
+
+# ── Conversation Management Schemas ──────────────────────────────────────────
+class ConversationCreateIn(RequestModel):
+    title: str | None = Field(default=None, max_length=120)
+    company_kb_enabled: bool = True
+    google_drive_enabled: bool = False
+
+
+class ConversationOut(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    last_message_at: datetime
+    company_kb_enabled: bool = True
+    google_drive_enabled: bool = False
+
+
+class ConversationMessageOut(BaseModel):
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+    sources_used: dict[str, bool] | None = None
+
+
+class ConversationDetailOut(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    last_message_at: datetime
+    active_scope: ActiveScopeInfo
+    company_kb_enabled: bool = True
+    google_drive_enabled: bool = False
+    messages: list[ConversationMessageOut] = Field(default_factory=list)
+
 
 
 # ── OKF knowledge management ──────────────────────────────────────────────────

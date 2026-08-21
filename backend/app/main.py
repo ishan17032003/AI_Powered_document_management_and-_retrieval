@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
@@ -18,6 +18,7 @@ from .error_responses import (
 )
 from .middleware import LoginBodyLimitMiddleware, RequestCorrelationMiddleware
 from .model_warmup import warm_all_models
+from .mongodb import init_mongodb
 from .request_body_limits import RequestBodyLimitMiddleware
 from .routers import access, admin, audit, auth, documents, duplicates, ingestions, system
 from .routers import search as search_router
@@ -52,7 +53,7 @@ app.add_middleware(RequestCorrelationMiddleware)
 
 
 @app.on_event("startup")
-def _startup() -> None:
+async def _startup() -> None:
     # A web worker must never create or "repair" database objects. Operators
     # migrate explicitly before any process can serve.
     assert_schema_compatible(settings.database_url)
@@ -61,6 +62,9 @@ def _startup() -> None:
     # Docling, SigLIP2 — on background threads so the first user request never
     # pays the download/cold-start cost while /ready stays green immediately.
     warm_all_models()
+    # Initialise MongoDB connection and create indexes for Ask AI session store.
+    # No-op when DOCVAULT_MONGODB_URL is not set (stateless mode).
+    await init_mongodb()
 
 
 @app.exception_handler(ServiceError)
@@ -98,3 +102,13 @@ app.include_router(audit.router)
 app.include_router(admin.router)
 app.include_router(access.router)
 app.include_router(ingestions.router)
+
+# Direct alias for Google OAuth redirect URI (matches http://localhost:8080/api/auth/callback)
+app.add_api_route(
+    "/api/auth/callback",
+    auth.google_drive_callback,
+    methods=["GET"],
+    include_in_schema=False,
+    response_class=HTMLResponse,
+)
+

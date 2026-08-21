@@ -13,10 +13,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
 from .. import models, schemas
 from ..config import settings
 from ..database import get_db
 from ..deps import require, require_global
+from ..mongodb import get_db as get_mongo_db
+from ..repositories import ask_ai_repository
 from ..services import (
     okf_service,
     rbac_service,
@@ -27,6 +30,7 @@ from ..services import (
     visual_query_service,
     visual_telemetry,
 )
+from ..services.ask_ai.mongo_models import ActiveScope
 from ..utils.request_context import get_request_context
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
@@ -216,8 +220,10 @@ async def visual_image_search(
         normalized = b""
 
 
-@router.post("/ask", response_model=schemas.AskResponse)
-def ask(
+from fastapi.responses import StreamingResponse
+
+@router.post("/ask")
+async def ask(
     payload: schemas.AskQuery,
     request: Request,
     user: models.User = Depends(require("VIEW")),
@@ -226,17 +232,194 @@ def ask(
     """Ask a natural-language question; get a grounded answer with citations (RAG).
 
     Retrieval is security-trimmed to what the user may VIEW, so the AI answer
-    never draws on documents the user cannot access.
+    never draws on documents the user cannot access. Returns an SSE stream for multiple models.
     """
-    return search_application_service.ask(
+    stream_gen = search_application_service.ask_stream(
         db,
         user,
         question=payload.question,
         allowed_ids=set(search_authorization.resolve_view_document_ids(db, user)),
         document_id=payload.document_id,
         history=payload.history,
+        conversation_id=payload.conversation_id,
+        company_kb_enabled=payload.company_kb_enabled,
+        google_drive_enabled=payload.google_drive_enabled,
         context=get_request_context(request),
     )
+    return StreamingResponse(stream_gen, media_type="text/event-stream")
+
+
+class SelectAnswerQuery(BaseModel):
+    conversation_id: str
+    chosen_answer: str
+    provider: str
+
+@router.post("/ask/select")
+async def ask_select(
+    payload: SelectAnswerQuery,
+    user: models.User = Depends(require("VIEW")),
+    db: Session = Depends(get_db),
+):
+    """Save the chosen parallel LLM answer."""
+    return await search_application_service.select_answer(
+        conversation_id=payload.conversation_id,
+        user=user,
+        chosen_answer=payload.chosen_answer,
+        provider=payload.provider,
+    )
+
+
+# ── Ask AI Conversation Management ───────────────────────────────────────────
+
+
+@router.get("/conversations", response_model=list[schemas.ConversationOut])
+async def list_conversations(
+    user: models.User = Depends(require("VIEW")),
+):
+    """List recent Ask AI conversations for the current user."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        return []
+    convs = await ask_ai_repository.list_conversations(mongo_db, user.id)
+    return [
+        schemas.ConversationOut(
+            id=c["_id"],
+            title=c.get("title", "New Conversation"),
+            created_at=c.get("created_at"),
+            last_message_at=c.get("last_message_at"),
+            company_kb_enabled=c.get("company_kb_enabled", True),
+            google_drive_enabled=c.get("google_drive_enabled", False),
+        )
+        for c in convs
+    ]
+
+
+@router.post("/conversations", response_model=schemas.ConversationOut)
+async def create_conversation(
+    payload: schemas.ConversationCreateIn | None = None,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Create a new Ask AI conversation session."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Conversation persistence is disabled (MongoDB not configured).",
+        )
+    await ask_ai_repository.upsert_mongo_user(mongo_db, user.id, user.name, user.email)
+    kb_enabled = payload.company_kb_enabled if payload else True
+    drive_enabled = payload.google_drive_enabled if payload else False
+    conv_id = await ask_ai_repository.create_conversation(
+        mongo_db,
+        user.id,
+        company_kb_enabled=kb_enabled,
+        google_drive_enabled=drive_enabled,
+    )
+    if not conv_id:
+        raise HTTPException(status_code=500, detail="Failed to create conversation.")
+    conv = await ask_ai_repository.get_conversation(mongo_db, conv_id, user.id)
+    if not conv:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created conversation.")
+    return schemas.ConversationOut(
+        id=conv.id,
+        title=conv.title,
+        created_at=conv.created_at,
+        last_message_at=conv.last_message_at,
+        company_kb_enabled=conv.company_kb_enabled,
+        google_drive_enabled=conv.google_drive_enabled,
+    )
+
+
+@router.get("/conversations/{conversation_id}", response_model=schemas.ConversationDetailOut)
+async def get_conversation(
+    conversation_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Get conversation details including active scope and message history."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Conversation persistence is disabled (MongoDB not configured).",
+        )
+    conv = await ask_ai_repository.get_conversation(mongo_db, conversation_id, user.id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    history_docs = await ask_ai_repository.get_history_window(
+        mongo_db, conversation_id, scope_start_message_id=None, limit=100
+    )
+
+    messages = [
+        schemas.ConversationMessageOut(
+            id=m["_id"],
+            role=m["role"],
+            content=m["content"],
+            created_at=m["created_at"],
+            sources_used=m.get("sources_used"),
+        )
+        for m in history_docs
+    ]
+
+    active_scope_info = schemas.ActiveScopeInfo(
+        documents=[
+            schemas.ScopedDocumentInfo(document_id=d.document_id, title=d.title)
+            for d in conv.active_scope.documents
+        ],
+        classes=[
+            schemas.ScopedClassInfo(
+                class_id=c.class_id,
+                class_name=c.class_name,
+                document_ids=c.document_ids,
+            )
+            for c in conv.active_scope.classes
+        ],
+    )
+
+    return schemas.ConversationDetailOut(
+        id=conv.id,
+        title=conv.title,
+        created_at=conv.created_at,
+        last_message_at=conv.last_message_at,
+        active_scope=active_scope_info,
+        company_kb_enabled=conv.company_kb_enabled,
+        google_drive_enabled=conv.google_drive_enabled,
+        messages=messages,
+    )
+
+
+@router.delete("/conversations/{conversation_id}/scope")
+async def clear_conversation_scope(
+    conversation_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Clear active document and class filters for a conversation."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        return {"cleared": True}
+    conv = await ask_ai_repository.get_conversation(mongo_db, conversation_id, user.id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    await ask_ai_repository.update_conversation_scope(
+        mongo_db, conversation_id, user.id, ActiveScope(), None
+    )
+    return {"cleared": True}
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Delete a conversation and its messages."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        return {"deleted": True}
+    success = await ask_ai_repository.delete_conversation(mongo_db, conversation_id, user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"deleted": True}
+
 
 
 # ── OKF bundle management ─────────────────────────────────────────────────────

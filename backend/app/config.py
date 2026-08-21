@@ -184,13 +184,17 @@ class Settings(BaseSettings):
     #   "anthropic" -> Claude only
     #   "none"      -> extractive passages only
     llm_provider: str = "vllm"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    
     allow_external_llm: bool = False
     # Development-only escape hatch: permit plain-HTTP egress to an allowlisted
     # external provider host. Keep False anywhere document content matters.
     allow_insecure_llm_http: bool = False
     llm_allowed_hosts: list[str] = []
-    # Context window for answer generation. 5 passages × 1800 chars each = up to 9 000 chars.
-    rag_max_context_chars: int = 9000
+    # Context window for answer generation. Increased to allow larger/more chunks for better understanding.
+    rag_max_context_chars: int = 35000
     # Provider work has a per-process, no-queue admission cap. The web request
     # stops waiting at the total deadline even if a provider library has not
     # returned; provider threads remain capped and phase-timeout protected.
@@ -218,8 +222,15 @@ class Settings(BaseSettings):
     anthropic_url: str = "https://api.anthropic.com"
     rag_model: str = "claude-opus-4-8"
 
-    # CORS origins for the local SPA
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Cross-origin API access for local Vite / frontend.
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:80",
+        "http://localhost",
+    ]
 
     # ── Multimodal RAG pipeline additions ────────────────────────────────────────
 
@@ -253,6 +264,28 @@ class Settings(BaseSettings):
     # OKF (Open Knowledge Format) bundle directory.
     # If the path exists and contains Markdown files, OKF fast-path is active.
     okf_bundle_dir: Path = BASE_DIR / "okf_bundle"
+
+    # ── Ask AI / Conversational RAG ──────────────────────────────────────────────
+    # MongoDB for conversation session persistence (Ask AI feature).
+    # Set to "" to disable persistence (stateless mode, history from payload only).
+    mongodb_url: str = ""
+
+    # Ask AI conversation settings
+    ask_ai_max_history_turns: int = 20   # turns loaded per scope window
+    ask_ai_gdrive_max_docs: int = 5       # hard cap — Google Drive docs to vLLM
+
+    # Chunk size for indexing. Larger chunks mean richer per-passage context but
+    # fewer passages per LLM context window. Re-ingest documents after changing.
+    rag_chunk_max_chars: int = 3_500
+    rag_chunk_overlap_chars: int = 350
+
+    # Google OAuth (for user-level Google Drive integration).
+    # Set these in .env / Coolify environment to enable Drive connect in the UI.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Redirect URI must match the registered URI in Google Cloud Console exactly.
+    google_redirect_uri: str = "http://localhost:8080/api/v1/auth/google/callback"
+
 
     @field_validator("trusted_proxy_cidrs", mode="before")
     @classmethod

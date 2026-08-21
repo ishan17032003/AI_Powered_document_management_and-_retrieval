@@ -156,17 +156,80 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ScopedDocumentInfo {
+  document_id: number;
+  title: string;
+}
+
+export interface ScopedClassInfo {
+  class_id: number;
+  class_name: string;
+  document_ids: number[];
+}
+
+export interface ActiveScopeInfo {
+  documents: ScopedDocumentInfo[];
+  classes: ScopedClassInfo[];
+}
+
+export interface DriveSourceCitation {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  webViewLink: string;
+  matched_keywords: string[];
+  snippet: string;
+}
+
 export interface AskResponse {
   question: string;
   answer: string;
-  mode: string; // claude | extractive | clarify
+  mode: string; // claude | extractive | clarify | gdrive | combined | greeting | scope_removal
   model: string | null;
   needs_clarification: boolean;
   scoped_document_id: number | null;
   citations: { index: number; document_id: number; title: string }[];
   candidates: { document_id: number; title: string }[];
   images: VisualSearchHit[];
+  conversation_id?: string | null;
+  active_scope?: ActiveScopeInfo | null;
+  sources_used?: { company_kb: boolean; google_drive: boolean } | null;
+  drive_sources?: DriveSourceCitation[] | null;
 }
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  last_message_at: string;
+  company_kb_enabled: boolean;
+  google_drive_enabled: boolean;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  sources_used?: { company_kb: boolean; google_drive: boolean } | null;
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string;
+  created_at: string;
+  last_message_at: string;
+  active_scope: ActiveScopeInfo;
+  company_kb_enabled: boolean;
+  google_drive_enabled: boolean;
+  messages: ConversationMessage[];
+}
+
+export interface GoogleDriveStatus {
+  connected: boolean;
+  email: string | null;
+}
+
 
 export interface ImportResult {
   path: string;
@@ -448,12 +511,59 @@ export const api = {
     req<IngestionStatus>(`/ingestions/${encodeURIComponent(jobId)}/retry`, { method: "POST" }),
   cancelIngestion: (jobId: string) =>
     req<IngestionStatus>(`/ingestions/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }),
-  ask: (question: string, document_id?: number, history?: ChatMessage[]) =>
-    req<AskResponse>("/search/ask", {
+  // ── Google Drive OAuth ──────────────────────────────────────────────────
+  googleDriveStatus: () => req<GoogleDriveStatus>("/auth/google/status"),
+  googleDriveConnect: () => req<{ auth_url: string }>("/auth/google/connect"),
+  googleDriveDisconnect: () => req<{ disconnected: boolean }>("/auth/google/disconnect", { method: "POST" }),
+
+  // ── Ask AI Conversations ────────────────────────────────────────────────
+  listConversations: () => req<ConversationSummary[]>("/search/conversations"),
+  createConversation: (payload?: { title?: string; company_kb_enabled?: boolean; google_drive_enabled?: boolean }) =>
+    req<ConversationSummary>("/search/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, document_id: document_id ?? null, history: history ?? null }),
+      body: JSON.stringify(payload || {}),
     }),
+  getConversation: (id: string) => req<ConversationDetail>(`/search/conversations/${encodeURIComponent(id)}`),
+  clearConversationScope: (id: string) =>
+    req<{ cleared: boolean }>(`/search/conversations/${encodeURIComponent(id)}/scope`, { method: "DELETE" }),
+  deleteConversation: (id: string) =>
+    req<{ deleted: boolean }>(`/search/conversations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  askStream: async (
+    question: string,
+    document_id?: number | null,
+    history?: ChatMessage[] | null,
+    conversation_id?: string | null,
+    company_kb_enabled = true,
+    google_drive_enabled = false
+  ) => {
+    const headers = new Headers({ "Content-Type": "application/json" });
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const res = await fetch("/api/v1/search/ask", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        question,
+        document_id: document_id ?? null,
+        history: history ?? null,
+        conversation_id: conversation_id ?? null,
+        company_kb_enabled,
+        google_drive_enabled,
+      }),
+    });
+    if (!res.ok) throw new ApiError(res.status, "Ask stream failed");
+    return res;
+  },
+
+  selectAnswer: (conversation_id: string, chosen_answer: string, provider: string) =>
+    req<{ status: string }>("/search/ask/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id, chosen_answer, provider }),
+    }),
+
   duplicates: () => req<DupGroup[]>("/duplicates"),
   resolveDup: (groupId: number, primary: number) =>
     req<DupGroup>(`/duplicates/${groupId}/resolve`, {
