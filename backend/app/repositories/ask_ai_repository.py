@@ -351,8 +351,11 @@ async def append_turn_runs(
                 provider=str(run.get("provider", "")),
                 model_id=str(run.get("model_id", "")),
                 display_version=str(run.get("display_version", "")),
+                reasoning=str(run.get("reasoning", "none")),
                 body=str(run.get("body", "")),
                 status="error" if run.get("status") == "error" else "ok",
+                tool_events=list(run.get("tool_events") or []),
+                artifacts=list(run.get("artifacts") or []),
                 metrics=RunMetrics(**(run.get("metrics") or {})),
             )
             docs.append(doc.model_dump(by_alias=True))

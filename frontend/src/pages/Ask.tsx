@@ -23,6 +23,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import {
   ActiveScopeInfo,
   api,
+  getToken,
   AskResponse,
   ConversationSummary,
   DocSummary,
@@ -41,6 +42,8 @@ interface Turn {
   pending?: boolean;
   providerChunks?: Record<string, string>;
   runMeta?: Record<string, { model_id: string; display_version: string; status?: string; metrics?: AskRunMetrics }>;
+  toolEvents?: Record<string, { tool: string; label: string; summary?: string; status?: string; running: boolean }[]>;
+  artifacts?: Record<string, { id: string; name: string; mime: string; size: number }[]>;
   chosenProvider?: string;
 }
 
@@ -106,6 +109,7 @@ export default function Ask() {
   const [modelRegistry, setModelRegistry] = useState<AskProviderInfo[]>([]);
   const [providerEnabled, setProviderEnabled] = useState<Record<string, boolean>>({});
   const [modelChoice, setModelChoice] = useState<Record<string, string>>({});
+  const [reasoningChoice, setReasoningChoice] = useState<Record<string, string>>({});
   const [companyKbEnabled, setCompanyKbEnabled] = useState(true);
   const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
   const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false, email: null });
@@ -144,6 +148,7 @@ export default function Ask() {
 
   const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
   const [zoomed, setZoomed] = useState<VisualSearchHit | null>(null);
+  const [artifactPreview, setArtifactPreview] = useState<{ url: string; name: string; mime: string } | null>(null);
   const requestedPreviews = useRef(new Set<number>());
   const createdPreviewUrls = useRef<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -373,6 +378,28 @@ export default function Ask() {
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomed]);
 
+  async function openArtifact(a: { id: string; name: string; mime: string }) {
+    try {
+      const headers = new Headers();
+      const token = getToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const res = await fetch(`/api/v1/search/ask/artifacts/${encodeURIComponent(a.id)}/preview`, { headers });
+      if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+      const blob = await res.blob();
+      // SECURITY: never window.open a blob of model-generated HTML — a blob URL
+      // inherits the app origin. Render inside a sandboxed iframe (opaque
+      // origin, no storage/cookie access) instead.
+      setArtifactPreview({ url: URL.createObjectURL(blob), name: a.name, mime: a.mime });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function closeArtifactPreview() {
+    if (artifactPreview) URL.revokeObjectURL(artifactPreview.url);
+    setArtifactPreview(null);
+  }
+
   async function run(value: string) {
     const normalized = value.trim();
     if (!normalized || busy) return;
@@ -392,7 +419,7 @@ export default function Ask() {
       const modelsPayload = modelRegistry.length > 0
         ? modelRegistry
             .filter((p) => providerEnabled[p.provider] !== false)
-            .map((p) => ({ provider: p.provider, model_id: modelChoice[p.provider] ?? null }))
+            .map((p) => ({ provider: p.provider, model_id: modelChoice[p.provider] ?? null, reasoning: reasoningChoice[p.provider] ?? null }))
         : null;
       const res = await api.askStream(
         normalized,
@@ -411,6 +438,8 @@ export default function Ask() {
       let responseMeta: any = null;
       let chunks: Record<string, string> = {};
       let runMeta: Turn["runMeta"] = {};
+      let toolEvents: NonNullable<Turn["toolEvents"]> = {};
+      let artifacts: NonNullable<Turn["artifacts"]> = {};
 
       let buffer = "";
       let isDone = false;
@@ -467,6 +496,31 @@ export default function Ask() {
                 setTurns((current) =>
                   current.map((turn) =>
                     turn.id === id ? { ...turn, runMeta: { ...runMeta } } : turn
+                  )
+                );
+              } else if (data.type === "tool_started" && data.provider) {
+                const list = toolEvents[data.provider] ?? (toolEvents[data.provider] = []);
+                list.push({ tool: data.tool, label: data.label || data.tool, running: true });
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === id ? { ...turn, toolEvents: { ...toolEvents } } : turn
+                  )
+                );
+              } else if (data.type === "tool_result" && data.provider) {
+                const list = toolEvents[data.provider] ?? (toolEvents[data.provider] = []);
+                const open = [...list].reverse().find((t) => t.running && t.tool === data.tool);
+                if (open) { open.running = false; open.summary = data.summary; open.status = data.status; }
+                else list.push({ tool: data.tool, label: data.label || data.tool, summary: data.summary, status: data.status, running: false });
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === id ? { ...turn, toolEvents: { ...toolEvents } } : turn
+                  )
+                );
+              } else if (data.type === "artifact" && data.provider) {
+                (artifacts[data.provider] ?? (artifacts[data.provider] = [])).push({ id: data.id, name: data.name, mime: data.mime, size: data.size });
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === id ? { ...turn, artifacts: { ...artifacts } } : turn
                   )
                 );
               } else if (data.chunk !== undefined && data.provider) {
@@ -903,6 +957,34 @@ export default function Ask() {
                                             </span>
                                           )}
                                         </div>
+                                        {(turn.toolEvents?.[provider]?.length ?? 0) > 0 && (
+                                          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.6rem" }}>
+                                            {turn.toolEvents![provider].map((t, ti) => (
+                                              <div key={ti} style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: t.status === "error" ? "var(--danger, #b3261e)" : "var(--text-muted)", background: "var(--surface-100, rgba(0,0,0,0.03))", border: "1px solid var(--line)", borderRadius: "6px", padding: "0.28rem 0.5rem" }}>
+                                                <span>{t.tool === "search_documents" ? "⌕" : "≣"}</span>
+                                                <span style={{ fontWeight: 600 }}>{t.label}</span>
+                                                <span style={{ marginLeft: "auto" }}>{t.running ? "running…" : t.summary}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {(turn.artifacts?.[provider]?.length ?? 0) > 0 && (
+                                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.6rem" }}>
+                                            {turn.artifacts![provider].map((a) => (
+                                              <button
+                                                key={a.id}
+                                                type="button"
+                                                onClick={() => openArtifact(a)}
+                                                title={`${a.name} · ${(a.size / 1024).toFixed(1)} KB`}
+                                                style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--brand)", background: "var(--surface-50)", color: "var(--brand)", borderRadius: "7px", padding: "0.3rem 0.6rem", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
+                                              >
+                                                <span>▤</span>
+                                                <span style={{ maxWidth: "11rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+                                                <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>Open</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
                                         <div style={{ flex: 1, overflowY: "auto", minHeight: "80px", maxHeight: "350px", fontSize: "0.92rem", lineHeight: "1.6" }}>
                                           {chunk ? (
                                             <AnswerMarkdown text={chunk} />
@@ -1049,6 +1131,24 @@ export default function Ask() {
                         <option key={v.model_id} value={v.model_id}>{v.display_version}</option>
                       ))}
                     </select>
+                    {(() => {
+                      const ver = p.versions.find((v) => v.model_id === (modelChoice[p.provider] ?? "")) ?? p.versions.find((v) => v.default);
+                      const levels = ver?.reasoning_levels ?? [];
+                      if (levels.length === 0) return null;
+                      return (
+                        <select
+                          value={reasoningChoice[p.provider] ?? "none"}
+                          disabled={!enabled}
+                          onChange={(e) => setReasoningChoice((cur) => ({ ...cur, [p.provider]: e.target.value }))}
+                          title="Reasoning effort"
+                          style={{ border: "none", background: "transparent", fontSize: "0.7rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)", cursor: "pointer" }}
+                        >
+                          {levels.map((l) => (
+                            <option key={l} value={l}>{l === "none" ? "no reasoning" : `reason: ${l}`}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -1285,6 +1385,34 @@ export default function Ask() {
 
         </section>
       </div>
+
+      {artifactPreview && (
+        <div
+          onClick={closeArtifactPreview}
+          style={{ position: "fixed", inset: 0, background: "rgba(13,27,47,0.55)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: "3vh 3vw" }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface, #fff)", borderRadius: "12px", width: "min(960px, 94vw)", height: "min(80vh, 900px)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.6rem 0.9rem", borderBottom: "1px solid var(--line)" }}>
+              <span style={{ fontWeight: 600, fontSize: "0.9rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{artifactPreview.name}</span>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace" }}>{artifactPreview.mime} · sandboxed preview</span>
+              <a href={artifactPreview.url} download={artifactPreview.name} className="button is-small" style={{ marginLeft: "auto" }}>Download</a>
+              <button type="button" className="button is-small" onClick={closeArtifactPreview}>Close</button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, background: "#fff" }}>
+              {artifactPreview.mime.startsWith("image/") ? (
+                <img src={artifactPreview.url} alt={artifactPreview.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block", margin: "0 auto" }} />
+              ) : (
+                <iframe
+                  title={artifactPreview.name}
+                  src={artifactPreview.url}
+                  sandbox="allow-scripts"
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {zoomed && (

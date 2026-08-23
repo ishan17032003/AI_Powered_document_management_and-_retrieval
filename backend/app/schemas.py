@@ -319,10 +319,11 @@ class ChatMessage(BaseModel):
 
 
 class ModelSelection(RequestModel):
-    """One requested model run: provider key + optional version id."""
+    """One requested model run: provider key + optional version/reasoning."""
 
     provider: str = Field(min_length=1, max_length=32)
     model_id: str | None = Field(default=None, max_length=128)
+    reasoning: Literal["none", "low", "medium", "high"] | None = None
 
 
 class AskQuery(RequestModel):

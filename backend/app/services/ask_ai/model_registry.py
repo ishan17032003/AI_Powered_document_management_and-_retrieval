@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 from ...config import settings
 
 
+REASONING_LEVELS = ("none", "low", "medium", "high")
+
+
 @dataclass(frozen=True)
 class ModelVersion:
     model_id: str
@@ -25,6 +28,8 @@ class ModelVersion:
     price_in_per_mtok: float = 0.0
     price_out_per_mtok: float = 0.0
     default: bool = False
+    # Reasoning levels the user may pick for this version; empty = fixed.
+    reasoning_levels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -41,7 +46,16 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="ChatGPT",
         color="#10a37f",
         versions=(
-            ModelVersion("gpt-4o", "GPT-4o", ("text", "code", "html", "report", "vision"), 2.50, 10.00, default=True),
+            # GPT-5.6 family (July 2026) — current OpenAI lineup. Sol input price
+            # reflects the promotional short-context rate cut of 2026-08-22.
+            ModelVersion("gpt-5.6-sol", "5.6 Sol", ("text", "code", "html", "report", "vision"), 4.00, 20.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gpt-5.6-terra", "5.6 Terra", ("text", "code", "html", "report", "vision"), 2.00, 12.00, default=True, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gpt-5.6-luna", "5.6 Luna", ("text", "code", "html"), 0.20, 1.20, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gpt-5.5", "GPT-5.5", ("text", "code", "html", "report", "vision"), 5.00, 30.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gpt-5.4", "GPT-5.4", ("text", "code", "html", "report"), 2.50, 15.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gpt-5.4-mini", "GPT-5.4 mini", ("text", "code", "html"), 0.75, 4.50, reasoning_levels=REASONING_LEVELS),
+            # Legacy but still serviceable
+            ModelVersion("gpt-4o", "GPT-4o", ("text", "code", "html", "report", "vision"), 2.50, 10.00),
             ModelVersion("gpt-4o-mini", "GPT-4o mini", ("text", "code", "html"), 0.15, 0.60),
         ),
     ),
@@ -50,9 +64,9 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="Claude",
         color="#d97757",
         versions=(
-            ModelVersion("claude-sonnet-4-5", "Sonnet 4.5", ("text", "code", "html", "report", "vision"), 3.00, 15.00, default=True),
-            ModelVersion("claude-opus-4-8", "Opus 4.8", ("text", "code", "html", "report", "vision"), 15.00, 75.00),
-            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 1.00, 5.00),
+            ModelVersion("claude-sonnet-4-5", "Sonnet 4.5", ("text", "code", "html", "report", "vision"), 3.00, 15.00, default=True, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-opus-4-8", "Opus 4.8", ("text", "code", "html", "report", "vision"), 15.00, 75.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 1.00, 5.00, reasoning_levels=REASONING_LEVELS),
         ),
     ),
     ProviderEntry(
@@ -60,8 +74,8 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="Gemini",
         color="#4285f4",
         versions=(
-            ModelVersion("gemini-2.5-pro", "2.5 Pro", ("text", "code", "html", "report", "vision"), 1.25, 10.00, default=True),
-            ModelVersion("gemini-2.5-flash", "2.5 Flash", ("text", "code", "html"), 0.30, 2.50),
+            ModelVersion("gemini-2.5-pro", "2.5 Pro", ("text", "code", "html", "report", "vision"), 1.25, 10.00, default=True, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gemini-2.5-flash", "2.5 Flash", ("text", "code", "html"), 0.30, 2.50, reasoning_levels=REASONING_LEVELS),
         ),
     ),
 )
@@ -124,6 +138,7 @@ def to_public(entries: list[ProviderEntry]) -> list[dict]:
                     "capabilities": list(v.capabilities),
                     "pricing_per_mtok": {"in": v.price_in_per_mtok, "out": v.price_out_per_mtok},
                     "default": v.default,
+                    "reasoning_levels": list(v.reasoning_levels),
                 }
                 for v in e.versions
             ],

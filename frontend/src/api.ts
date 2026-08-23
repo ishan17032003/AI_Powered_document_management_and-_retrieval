@@ -187,6 +187,7 @@ export interface AskModelVersion {
   capabilities: string[];
   pricing_per_mtok: { in: number; out: number };
   default: boolean;
+  reasoning_levels?: string[];
 }
 
 export interface AskProviderInfo {
@@ -562,7 +563,7 @@ export const api = {
     conversation_id?: string | null,
     company_kb_enabled = true,
     google_drive_enabled = false,
-    models?: { provider: string; model_id: string | null }[] | null
+    models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null
   ) => {
     const headers = new Headers({ "Content-Type": "application/json" });
     const token = getToken();

@@ -10,7 +10,7 @@ from io import BytesIO
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
@@ -220,7 +220,7 @@ async def visual_image_search(
         normalized = b""
 
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 @router.post("/ask")
 async def ask(
@@ -257,6 +257,48 @@ def ask_models(user: models.User = Depends(require("VIEW"))):
     from ..services.ask_ai.multi_llm import get_configured_providers
 
     return {"providers": model_registry.to_public(model_registry.available_providers(get_configured_providers()))}
+
+
+@router.get("/ask/artifacts/{artifact_id}")
+async def ask_artifact_download(
+    artifact_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Download an Ask AI generated artifact (owner-only)."""
+    from ..mongodb import get_db as get_mongo_db
+    from ..services.ask_ai import artifact_store
+
+    meta = await artifact_store.get_artifact(get_mongo_db(), artifact_id, user.id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return FileResponse(
+        meta["path"],
+        media_type=meta["mime"],
+        filename=meta["name"],
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/ask/artifacts/{artifact_id}/preview")
+async def ask_artifact_preview(
+    artifact_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Inline preview. Generated HTML is served fully sandboxed via CSP —
+    no scripts' network egress, no cookies, isolated origin semantics."""
+    from ..mongodb import get_db as get_mongo_db
+    from ..services.ask_ai import artifact_store
+
+    meta = await artifact_store.get_artifact(get_mongo_db(), artifact_id, user.id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    headers = {"X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"}
+    if meta["mime"] == "text/html":
+        headers["Content-Security-Policy"] = (
+            "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; "
+            "style-src 'unsafe-inline'; img-src data:; font-src data:"
+        )
+    return FileResponse(meta["path"], media_type=meta["mime"], headers=headers)
 
 
 class SelectAnswerQuery(BaseModel):

@@ -134,8 +134,11 @@ class MongoTurnRun(BaseModel):
     provider: str
     model_id: str
     display_version: str = ""
+    reasoning: str = "none"
     body: str = ""
     status: Literal["ok", "error"] = "ok"
+    tool_events: list[dict] = Field(default_factory=list)
+    artifacts: list[dict] = Field(default_factory=list)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     selected: bool = False
     created_at: datetime = Field(default_factory=_now)

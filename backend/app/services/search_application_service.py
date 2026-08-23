@@ -785,17 +785,27 @@ async def ask_stream(
     from .ask_ai import model_registry
     configured_providers = get_configured_providers()
     if model_selections is not None:
-        selections = {m.provider: m.model_id for m in model_selections if m.provider in configured_providers}
+        selections = {
+            m.provider: {"model_id": m.model_id, "reasoning": m.reasoning}
+            for m in model_selections
+            if m.provider in configured_providers
+        }
         if not selections:
-            selections = {p: None for p in configured_providers}
+            selections = {p: {} for p in configured_providers}
     else:
-        selections = {p: None for p in configured_providers}
+        selections = {p: {} for p in configured_providers}
     registry_public = model_registry.to_public(model_registry.available_providers(configured_providers))
 
     yield f'data: {json.dumps({"type": "meta", "conversation_id": conversation_id, "active_scope": _to_active_scope_info(active_scope), "citations": citations, "drive_sources": drive_sources, "images": images_payload, "providers": configured_providers, "models": registry_public}, default=str)}\n\n'
 
     # Build prompt for providers
-    system_prompt = "You are DocVault AI. Answer based on the provided context.\n"
+    system_prompt = (
+        "You are DocVault AI. Answer based on the provided context.\n"
+        "You may call the read-only tools search_documents (re-query the vault "
+        "for passages) and list_documents (catalogue lookup) when the provided "
+        "context is insufficient or a claim needs verification. Results are "
+        "limited to documents the user is authorized to view; cite what you use.\n"
+    )
     if kb_result and kb_result.mode != "notfound":
         system_prompt += f"\nCompany KB Context:\n{kb_result.answer}\n"
     if drive_files:
@@ -804,10 +814,18 @@ async def ask_stream(
     
     provider_messages = [{"role": "system", "content": system_prompt}] + rag_history + [{"role": "user", "content": clean_query}]
 
+    # Tools: authorized retrieval/catalogue re-query, scoped exactly like the
+    # chat context (conversation scope ∩ caller's VIEW set).
+    from .ask_ai.tools import ToolContext
+    tools_ctx = ToolContext(
+        db, user.id, allowed_ids, active_scope,
+        mongo_db=mongo_db, conversation_id=conversation_id,
+    )
+
     # Accumulate every model run so the full comparison grid is persisted in
     # Mongo (ask_ai_turn_runs), not just the answer the user later selects.
     run_acc: dict[str, dict] = {}
-    async for chunk in synthesize_parallel_stream(provider_messages, selections):
+    async for chunk in synthesize_parallel_stream(provider_messages, selections, tools_ctx):
         try:
             event = json.loads(chunk[6:]) if chunk.startswith("data: ") else None
         except (json.JSONDecodeError, TypeError):
@@ -820,10 +838,21 @@ async def ask_stream(
                     "provider": provider,
                     "model_id": event.get("model_id", ""),
                     "display_version": event.get("display_version", ""),
+                    "reasoning": event.get("reasoning", "none"),
                     "body": "",
+                    "tool_events": [],
                 }
             elif etype == "chunk" and provider in run_acc:
                 run_acc[provider]["body"] += event.get("chunk", "")
+            elif etype == "artifact" and provider in run_acc:
+                run_acc[provider].setdefault("artifacts", []).append(
+                    {"id": event.get("id"), "name": event.get("name"),
+                     "mime": event.get("mime"), "size": event.get("size")}
+                )
+            elif etype in ("tool_started", "tool_result") and provider in run_acc:
+                run_acc[provider]["tool_events"].append(
+                    {k: v for k, v in event.items() if k not in ("provider",)}
+                )
             elif etype == "run_completed" and provider in run_acc:
                 run_acc[provider]["status"] = event.get("status", "ok")
                 run_acc[provider]["metrics"] = event.get("metrics") or {}
