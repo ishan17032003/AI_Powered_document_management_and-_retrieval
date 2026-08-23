@@ -113,6 +113,7 @@ export default function Ask() {
   const [providerEnabled, setProviderEnabled] = useState<Record<string, boolean>>({});
   const [modelChoice, setModelChoice] = useState<Record<string, string>>({});
   const [reasoningChoice, setReasoningChoice] = useState<Record<string, string>>({});
+  const [activeConvIsBranch, setActiveConvIsBranch] = useState(false);
   const [askUsage, setAskUsage] = useState<Awaited<ReturnType<typeof api.getAskUsage>> | null>(null);
   const [companyKbEnabled, setCompanyKbEnabled] = useState(true);
   const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
@@ -240,6 +241,7 @@ export default function Ask() {
     setBusy(true);
     try {
       const detail = await api.getConversation(id);
+      setActiveConvIsBranch((detail.parent_ids?.length ?? 0) > 0);
       // Branches carry their own model set (default: only the continued model);
       // root conversations reset to every provider enabled.
       if (detail.enabled_models && detail.enabled_models.length > 0) {
@@ -343,6 +345,7 @@ export default function Ask() {
       });
       setConversations((prev) => [newConv, ...prev]);
       setActiveConvId(newConv.id);
+      setActiveConvIsBranch(false);
       setActiveScope({ documents: [], classes: [] });
       setCompanyKbEnabled(true);
       setGoogleDriveEnabled(false);
@@ -609,6 +612,7 @@ export default function Ask() {
       const convList = await api.listConversations();
       setConversations(convList);
       await selectConversation(res.conversation_id);
+      setActiveConvIsBranch(true);
     } catch (err) {
       console.error(err);
     }
@@ -1317,8 +1321,9 @@ export default function Ask() {
                                     className="llm-grid"
                                     style={{
                                       display: "grid",
+                                      width: "100%",
                                       gridTemplateColumns:
-                                        Object.keys(turn.providerChunks).length === 1
+                                        Object.keys(turn.providerChunks).filter((k) => k !== "Notice").length <= 1
                                           ? "1fr"
                                           : Object.keys(turn.providerChunks).length === 2
                                           ? "repeat(2, 1fr)"
@@ -1482,14 +1487,17 @@ export default function Ask() {
                                               />
                                               pick
                                             </label>
-                                            <button
-                                              type="button"
-                                              className="button primary is-small"
-                                              style={{ flex: 1, fontWeight: 600 }}
-                                              onClick={() => continueWith(turn, provider, chunk)}
-                                            >
-                                              Continue with {provider}
-                                            </button>
+                                            {!activeConvIsBranch && (
+                                              <button
+                                                type="button"
+                                                className="button primary is-small"
+                                                style={{ flex: 1, fontWeight: 600 }}
+                                                onClick={() => continueWith(turn, provider, chunk)}
+                                              >
+                                                Continue with {provider}
+                                              </button>
+                                            )}
+                                            {activeConvIsBranch && <span style={{ flex: 1 }} />}
                                             <button
                                               type="button"
                                               className="button is-small"
@@ -1506,9 +1514,11 @@ export default function Ask() {
                                   {(() => {
                                     const pickedIds = Object.keys(turn.picked ?? {}).filter((k) => turn.picked![k]);
                                     if (turn.pending || pickedIds.length === 0) return null;
-                                    const targets = Object.keys(turn.providerChunks ?? {}).filter(
-                                      (t) => t !== "Notice" && !pickedIds.includes(t)
-                                    );
+                                    // Offer every configured model as a target — not just the
+                                    // ones that ran this turn (a branch runs a single model).
+                                    const targets = modelRegistry
+                                      .map((p) => p.provider)
+                                      .filter((t) => !pickedIds.includes(t));
                                     return (
                                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.7rem", flexWrap: "wrap", fontSize: "0.8rem" }}>
                                         <span style={{ color: "var(--text-muted)" }}>
