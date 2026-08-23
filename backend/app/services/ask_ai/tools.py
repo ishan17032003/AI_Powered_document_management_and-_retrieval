@@ -33,6 +33,9 @@ _log = logging.getLogger(__name__)
 _MAX_SEARCH_LIMIT = 10
 _MAX_LIST_LIMIT = 25
 _MAX_ARGS_BYTES = 4000
+# execute_python carries whole scripts in its arguments; align with the
+# sandbox's own 20k-char code limit (plus JSON-escaping overhead).
+_MAX_CODE_ARGS_BYTES = 32000
 _MAX_RESULT_CHARS = 8000
 
 TOOL_LABELS = {
@@ -87,11 +90,19 @@ _OPENAI_SCHEMAS = [
         "function": {
             "name": "execute_python",
             "description": (
-                "Execute Python code in a restricted sandbox (no network, 10s CPU, "
-                "512MB). stdout/stderr are returned. Any file you write into the "
-                "./out directory is stored and offered to the user as a "
-                "downloadable artifact with preview (HTML, CSV, PNG charts, JSON…). "
-                "Use for calculations, tabulation, or generating reports/pages."
+                "Execute Python code in a resource-limited sandbox (60s CPU, 1GB "
+                "RAM, 120s wall). stdout/stderr are returned. Save every output "
+                "file into the ./out directory — it is stored and automatically "
+                "attached to your answer as a downloadable artifact with an "
+                "in-app preview (HTML, PPTX, XLSX, DOCX, PDF, CSV, PNG, JSON…). "
+                "python-pptx, openpyxl, python-docx, pillow and pymupdf are "
+                "preinstalled. If you need another package, install it "
+                "temporarily inside the same run: "
+                "subprocess.run([sys.executable, '-m', 'pip', 'install', "
+                "'--target', './pkgs', '<package>']) then "
+                "sys.path.insert(0, './pkgs') before importing. "
+                "NEVER invent download links (no sandbox:/ or /mnt/data paths) — "
+                "the platform attaches saved files automatically."
             ),
             "parameters": {
                 "type": "object",
@@ -108,10 +119,13 @@ _CODE_TOOLS = {"execute_python"}
 
 
 def openai_tool_schemas(capabilities: tuple[str, ...] | None = None) -> list[dict]:
+    from ...config import settings
+
     caps = set(capabilities or ())
+    sandbox_ok = settings.ask_ai_sandbox_enabled
     return [
         t for t in _OPENAI_SCHEMAS
-        if t["function"]["name"] not in _CODE_TOOLS or "code" in caps
+        if t["function"]["name"] not in _CODE_TOOLS or ("code" in caps and sandbox_ok)
     ]
 
 
@@ -155,8 +169,9 @@ class ToolContext:
 
     async def run(self, name: str, raw_args: str, provider: str = "") -> dict:
         """Execute one tool call; always returns a JSON-safe dict."""
-        if len(raw_args or "") > _MAX_ARGS_BYTES:
-            return {"error": "arguments too large"}
+        limit = _MAX_CODE_ARGS_BYTES if name == "execute_python" else _MAX_ARGS_BYTES
+        if len(raw_args or "") > limit:
+            return {"error": f"arguments too large (max {limit} bytes for {name})"}
         try:
             args = json.loads(raw_args) if raw_args else {}
             if not isinstance(args, dict):
@@ -178,12 +193,23 @@ class ToolContext:
                 return {"error": f"tool execution failed: {type(exc).__name__}"}
 
     async def _execute_python(self, args: dict, provider: str = "") -> dict:
+        from ...config import settings
+        from ...repositories import ask_ai_repository
         from . import artifact_store, sandbox_executor
 
+        if not settings.ask_ai_sandbox_enabled:
+            return {"error": "the python sandbox is disabled by the administrator"}
+        cap = settings.ask_ai_daily_sandbox_limit
+        if cap > 0 and self._mongo_db is not None:
+            usage = await ask_ai_repository.get_daily_usage(self._mongo_db, self._user_id)
+            if usage["sandbox_execs"] >= cap:
+                return {"error": f"daily sandbox execution limit reached ({cap}/day)"}
         code = str(args.get("code", ""))
         if not code.strip():
             return {"error": "code is required"}
         result = await asyncio.to_thread(sandbox_executor.run_python, code)
+        if self._mongo_db is not None:
+            await ask_ai_repository.add_daily_usage(self._mongo_db, self._user_id, sandbox_execs=1)
         artifacts_meta: list[dict] = []
         for a in result.artifacts:
             meta = await artifact_store.save_artifact(

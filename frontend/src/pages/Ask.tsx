@@ -41,10 +41,13 @@ interface Turn {
   error?: string;
   pending?: boolean;
   providerChunks?: Record<string, string>;
-  runMeta?: Record<string, { model_id: string; display_version: string; status?: string; metrics?: AskRunMetrics }>;
-  toolEvents?: Record<string, { tool: string; label: string; summary?: string; status?: string; running: boolean }[]>;
+  runMeta?: Record<string, { model_id: string; display_version: string; status?: string; metrics?: AskRunMetrics; passedFrom?: string[] }>;
+  toolEvents?: Record<string, { tool: string; label: string; summary?: string; status?: string; running: boolean; code?: string }[]>;
   artifacts?: Record<string, { id: string; name: string; mime: string; size: number }[]>;
   chosenProvider?: string;
+  picked?: Record<string, boolean>;
+  evidence?: { sources: string[]; routes: { kind: string; label: string }[]; grounding: string; drive_files: string[] };
+  startedAt?: number;
 }
 
 type MentionView = "none" | "choose_type" | "doc_list" | "class_list";
@@ -110,6 +113,7 @@ export default function Ask() {
   const [providerEnabled, setProviderEnabled] = useState<Record<string, boolean>>({});
   const [modelChoice, setModelChoice] = useState<Record<string, string>>({});
   const [reasoningChoice, setReasoningChoice] = useState<Record<string, string>>({});
+  const [askUsage, setAskUsage] = useState<Awaited<ReturnType<typeof api.getAskUsage>> | null>(null);
   const [companyKbEnabled, setCompanyKbEnabled] = useState(true);
   const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
   const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false, email: null });
@@ -133,6 +137,7 @@ export default function Ask() {
         return next;
       });
     }).catch(() => {});
+    api.getAskUsage().then(setAskUsage).catch(() => {});
   }, []);
 
   // Available documents and classes for @ mentions
@@ -149,6 +154,8 @@ export default function Ask() {
   const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
   const [zoomed, setZoomed] = useState<VisualSearchHit | null>(null);
   const [artifactPreview, setArtifactPreview] = useState<{ url: string; name: string; mime: string } | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [comparisonLog, setComparisonLog] = useState<Awaited<ReturnType<typeof api.getConversationRuns>>["runs"] | null>(null);
   const requestedPreviews = useRef(new Set<number>());
   const createdPreviewUrls = useRef<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -174,6 +181,7 @@ export default function Ask() {
         setAvailableClasses(Array.from(classes).sort());
       });
     }).catch(() => {});
+    api.getAskUsage().then(setAskUsage).catch(() => {});
   }, []);
 
 
@@ -206,39 +214,116 @@ export default function Ask() {
     }
   }
 
+  function orderedConversations(): { conv: ConversationSummary; depth: number }[] {
+    const byParent = new Map<string, ConversationSummary[]>();
+    const byId = new Map(conversations.map((c) => [c.id, c]));
+    const roots: ConversationSummary[] = [];
+    for (const c of conversations) {
+      const parent = (c.parent_ids ?? [])[0];
+      if (parent && byId.has(parent)) {
+        (byParent.get(parent) ?? byParent.set(parent, []).get(parent)!).push(c);
+      } else {
+        roots.push(c);
+      }
+    }
+    const out: { conv: ConversationSummary; depth: number }[] = [];
+    const visit = (c: ConversationSummary, depth: number) => {
+      out.push({ conv: c, depth });
+      for (const child of byParent.get(c.id) ?? []) visit(child, depth + 1);
+    };
+    roots.forEach((r) => visit(r, 0));
+    return out;
+  }
+
   async function selectConversation(id: string) {
     setActiveConvId(id);
     setBusy(true);
     try {
       const detail = await api.getConversation(id);
+      // Branches carry their own model set (default: only the continued model);
+      // root conversations reset to every provider enabled.
+      if (detail.enabled_models && detail.enabled_models.length > 0) {
+        const set = new Map(detail.enabled_models.map((m) => [m.provider, m]));
+        setProviderEnabled(Object.fromEntries(modelRegistry.map((p) => [p.provider, set.has(p.provider)])));
+        setModelChoice((cur) => {
+          const next = { ...cur };
+          set.forEach((m, prov) => { if (m.model_id) next[prov] = m.model_id; });
+          return next;
+        });
+        setReasoningChoice((cur) => {
+          const next = { ...cur };
+          set.forEach((m, prov) => { next[prov] = m.reasoning ?? "none"; });
+          return next;
+        });
+      } else {
+        setProviderEnabled(Object.fromEntries(modelRegistry.map((p) => [p.provider, true])));
+      }
       setActiveScope(detail.active_scope || { documents: [], classes: [] });
       setCompanyKbEnabled(detail.company_kb_enabled ?? true);
       setGoogleDriveEnabled(detail.google_drive_enabled ?? false);
 
-      // Map conversation messages into turns
+      // Rebuild turns: pair user/assistant messages, then rehydrate the full
+      // comparison grid (cards, tools, artifacts, metrics) from persisted runs.
+      let runsByTurn = new Map<string, Awaited<ReturnType<typeof api.getConversationRuns>>["runs"]>();
+      try {
+        for (const r of (await api.getConversationRuns(id)).runs) {
+          const key = r.turn_message_id || "";
+          if (!runsByTurn.has(key)) runsByTurn.set(key, []);
+          runsByTurn.get(key)!.push(r);
+        }
+      } catch { /* runs unavailable — degrade to plain history */ }
+
       const reconstructed: Turn[] = [];
       const msgs = detail.messages || [];
       for (let i = 0; i < msgs.length; i++) {
         if (msgs[i].role === "user") {
           const userMsg = msgs[i];
           const nextMsg = msgs[i + 1]?.role === "assistant" ? msgs[i + 1] : null;
-          reconstructed.push({
+          const turn: Turn = {
             id: userMsg.id,
             question: userMsg.content,
-            response: nextMsg
-              ? {
-                  question: userMsg.content,
-                  answer: nextMsg.content,
-                  mode: "rag",
-                  model: null,
-                  needs_clarification: false,
-                  scoped_document_id: null,
-                  citations: [],
-                  candidates: [],
-                  images: [],
-                }
-              : undefined,
-          });
+            startedAt: userMsg.created_at ? Date.parse(userMsg.created_at) : undefined,
+            evidence: (userMsg as any).evidence ?? undefined,
+            response: {
+              question: userMsg.content,
+              answer: nextMsg?.content ?? "",
+              mode: "rag",
+              model: null,
+              needs_clarification: false,
+              scoped_document_id: null,
+              citations: [],
+              candidates: [],
+              images: [],
+              conversation_id: id,
+            } as any,
+          };
+          const runs = runsByTurn.get(userMsg.id) ?? [];
+          if (runs.length > 0) {
+            turn.providerChunks = {};
+            turn.runMeta = {};
+            turn.toolEvents = {};
+            turn.artifacts = {};
+            for (const r of runs) {
+              // Later runs of the same provider (regenerate/second pass) win.
+              turn.providerChunks[r.provider] = r.body;
+              turn.runMeta[r.provider] = {
+                model_id: r.model_id,
+                display_version: r.display_version,
+                status: r.status,
+                metrics: r.metrics,
+                passedFrom: r.passed_from?.length ? r.passed_from : undefined,
+              };
+              turn.toolEvents[r.provider] = (r.tool_events ?? [])
+                .filter((t) => t.type === "tool_result")
+                .map((t) => ({ tool: t.tool, label: t.label || t.tool, summary: t.summary, status: t.status, running: false }));
+              turn.artifacts[r.provider] = r.artifacts ?? [];
+              if (r.selected) turn.chosenProvider = r.provider;
+            }
+            if (!turn.chosenProvider && nextMsg && (nextMsg as any).provider) {
+              turn.chosenProvider = (nextMsg as any).provider;
+            }
+          }
+          reconstructed.push(turn);
           if (nextMsg) i++;
         }
       }
@@ -400,6 +485,217 @@ export default function Ask() {
     setArtifactPreview(null);
   }
 
+  async function copyText(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey((cur) => (cur === key ? null : cur)), 1600);
+  }
+
+  function providerColor(provider: string): string | undefined {
+    return modelRegistry.find((p) => p.provider === provider)?.color;
+  }
+
+  async function rerunModels(turn: Turn, targets: string[]) {
+    const convId = turn.response?.conversation_id || activeConvId;
+    if (!convId || busy || targets.length === 0) return;
+    setBusy(true);
+    setTurns((current) =>
+      current.map((t) => {
+        if (t.id !== turn.id) return t;
+        const next = { ...t, pending: true };
+        for (const target of targets) {
+          next.providerChunks = { ...next.providerChunks, [target]: "" };
+          next.toolEvents = { ...next.toolEvents, [target]: [] };
+          next.artifacts = { ...next.artifacts, [target]: [] };
+          const prev = next.runMeta?.[target];
+          next.runMeta = { ...next.runMeta, [target]: { model_id: prev?.model_id ?? "", display_version: prev?.display_version ?? "", metrics: undefined, status: undefined } };
+        }
+        return next;
+      })
+    );
+    try {
+      const res = await api.askStream(
+        turn.question, null, undefined, convId, companyKbEnabled, googleDriveEnabled,
+        targets.map((t) => ({ provider: t, model_id: modelChoice[t] ?? null, reasoning: reasoningChoice[t] ?? null })),
+        null, true
+      );
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No readable stream");
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+      while (!done) {
+        const { done: rDone, value } = await reader.read();
+        if (rDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          let data: any;
+          try { data = JSON.parse(trimmed.substring(6)); } catch { continue; }
+          if (data.type === "done") { done = true; break; }
+          const target = data.provider;
+          if (!target || !targets.includes(target)) continue;
+          setTurns((current) =>
+            current.map((t) => {
+              if (t.id !== turn.id) return t;
+              const next = { ...t };
+              if (data.type === "chunk") {
+                next.providerChunks = { ...next.providerChunks, [target]: (next.providerChunks?.[target] ?? "") + data.chunk };
+              } else if (data.type === "run_started") {
+                next.runMeta = { ...next.runMeta, [target]: { model_id: data.model_id || "", display_version: data.display_version || "" } };
+              } else if (data.type === "run_completed") {
+                next.runMeta = { ...next.runMeta, [target]: { ...(next.runMeta?.[target] as any), status: data.status, metrics: data.metrics } };
+              } else if (data.type === "tool_started") {
+                next.toolEvents = { ...next.toolEvents, [target]: [...(next.toolEvents?.[target] ?? []), { tool: data.tool, label: data.label || data.tool, running: true }] };
+              } else if (data.type === "tool_result") {
+                const list = [...(next.toolEvents?.[target] ?? [])];
+                const open = [...list].reverse().find((x) => x.running && x.tool === data.tool);
+                if (open) { open.running = false; open.summary = data.summary; open.status = data.status; }
+                next.toolEvents = { ...next.toolEvents, [target]: list };
+              } else if (data.type === "artifact") {
+                next.artifacts = { ...next.artifacts, [target]: [...(next.artifacts?.[target] ?? []), { id: data.id, name: data.name, mime: data.mime, size: data.size }] };
+              }
+              return next;
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTurns((current) => current.map((t) => (t.id === turn.id ? { ...t, pending: false } : t)));
+      setBusy(false);
+      api.getAskUsage().then(setAskUsage).catch(() => {});
+    }
+  }
+
+  async function continueWith(turn: Turn, provider: string, content: string) {
+    const convId = turn.response?.conversation_id || activeConvId;
+    if (!convId) return;
+    // Merge-branch (spec §2.1): picked answers + the continued one form the sources.
+    const pickedIds = Object.keys(turn.picked ?? {}).filter((k) => turn.picked![k] && k !== provider);
+    const sources = [
+      { provider, model_id: turn.runMeta?.[provider]?.model_id ?? null, content },
+      ...pickedIds
+        .map((p) => ({ provider: p, model_id: turn.runMeta?.[p]?.model_id ?? null, content: turn.providerChunks?.[p] ?? "" }))
+        .filter((p) => p.content),
+    ];
+    try {
+      // The branch defaults to ONLY the continued model(s): one response per
+      // question until the user re-enables more models.
+      const branchModels = sources.map((src) => ({
+        provider: src.provider,
+        model_id: src.model_id ?? modelChoice[src.provider] ?? null,
+        reasoning: reasoningChoice[src.provider] ?? null,
+      }));
+      const res = await api.branchConversation(convId, sources, branchModels);
+      setTurns((current) =>
+        current.map((t) =>
+          t.id === turn.id ? { ...t, chosenProvider: provider, picked: {}, response: { ...t.response!, answer: content } } : t
+        )
+      );
+      const convList = await api.listConversations();
+      setConversations(convList);
+      await selectConversation(res.conversation_id);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function secondPass(turn: Turn, target: string) {
+    const convId = turn.response?.conversation_id || activeConvId;
+    if (!convId || busy) return;
+    const pickedIds = Object.keys(turn.picked ?? {}).filter((k) => turn.picked![k]);
+    const passed = pickedIds
+      .map((p) => ({ provider: p, model_id: turn.runMeta?.[p]?.model_id ?? null, content: turn.providerChunks?.[p] ?? "" }))
+      .filter((p) => p.content);
+    if (passed.length === 0) return;
+    setBusy(true);
+    // Reset the target card and stream the re-run into it.
+    setTurns((current) =>
+      current.map((t) =>
+        t.id === turn.id
+          ? {
+              ...t,
+              picked: {},
+              providerChunks: { ...t.providerChunks, [target]: "" },
+              runMeta: { ...t.runMeta, [target]: { model_id: "", display_version: "", passedFrom: pickedIds } },
+              toolEvents: { ...t.toolEvents, [target]: [] },
+              artifacts: { ...t.artifacts, [target]: [] },
+            }
+          : t
+      )
+    );
+    try {
+      const res = await api.askStream(
+        turn.question, null, undefined, convId, companyKbEnabled, googleDriveEnabled,
+        [{ provider: target, model_id: modelChoice[target] ?? null, reasoning: reasoningChoice[target] ?? null }],
+        passed
+      );
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No readable stream");
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+      while (!done) {
+        const { done: rDone, value } = await reader.read();
+        if (rDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          let data: any;
+          try { data = JSON.parse(trimmed.substring(6)); } catch { continue; }
+          if (data.type === "done") { done = true; break; }
+          if (data.provider !== target) continue;
+          setTurns((current) =>
+            current.map((t) => {
+              if (t.id !== turn.id) return t;
+              const next = { ...t };
+              if (data.type === "chunk") {
+                next.providerChunks = { ...next.providerChunks, [target]: (next.providerChunks?.[target] ?? "") + data.chunk };
+              } else if (data.type === "run_started") {
+                next.runMeta = { ...next.runMeta, [target]: { ...(next.runMeta?.[target] as any), model_id: data.model_id || "", display_version: data.display_version || "", passedFrom: pickedIds } };
+              } else if (data.type === "run_completed") {
+                next.runMeta = { ...next.runMeta, [target]: { ...(next.runMeta?.[target] as any), status: data.status, metrics: data.metrics } };
+              } else if (data.type === "tool_started") {
+                const list = [...(next.toolEvents?.[target] ?? [])];
+                list.push({ tool: data.tool, label: data.label || data.tool, running: true });
+                next.toolEvents = { ...next.toolEvents, [target]: list };
+              } else if (data.type === "tool_result") {
+                const list = [...(next.toolEvents?.[target] ?? [])];
+                const open = [...list].reverse().find((x) => x.running && x.tool === data.tool);
+                if (open) { open.running = false; open.summary = data.summary; open.status = data.status; }
+                next.toolEvents = { ...next.toolEvents, [target]: list };
+              } else if (data.type === "artifact") {
+                next.artifacts = { ...next.artifacts, [target]: [...(next.artifacts?.[target] ?? []), { id: data.id, name: data.name, mime: data.mime, size: data.size }] };
+              }
+              return next;
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function run(value: string) {
     const normalized = value.trim();
     if (!normalized || busy) return;
@@ -413,7 +709,7 @@ export default function Ask() {
         { role: "assistant" as const, content: turn.response!.answer },
       ]);
 
-    setTurns((current) => [...current, { id, question: normalized, pending: true, providerChunks: {} }]);
+    setTurns((current) => [...current, { id, question: normalized, pending: true, providerChunks: {}, startedAt: Date.now() }]);
 
     try {
       const modelsPayload = modelRegistry.length > 0
@@ -461,12 +757,20 @@ export default function Ask() {
               if (data.type === "done") { isDone = true; break; }
               if (data.type === "meta") {
                 responseMeta = data;
+                if (data.evidence) {
+                  setTurns((current) =>
+                    current.map((turn) => (turn.id === id ? { ...turn, evidence: data.evidence } : turn))
+                  );
+                }
                 if (data.active_scope && typeof data.active_scope === "object" && Array.isArray(data.active_scope.documents)) {
                   setActiveScope(data.active_scope);
                 }
                 if (data.conversation_id && !activeConvId) setActiveConvId(data.conversation_id);
-                if (Array.isArray(data.providers) && data.providers.length > 0) {
-                  data.providers.forEach((p: string) => {
+                {
+                  const runProviders = Array.isArray(data.run_providers) && data.run_providers.length > 0
+                    ? data.run_providers
+                    : (Array.isArray(data.providers) ? data.providers : []);
+                  runProviders.forEach((p: string) => {
                     if (chunks[p] === undefined) chunks[p] = "";
                   });
                 }
@@ -506,6 +810,17 @@ export default function Ask() {
                     turn.id === id ? { ...turn, toolEvents: { ...toolEvents } } : turn
                   )
                 );
+              } else if (data.type === "tool_progress" && data.provider) {
+                const list = toolEvents[data.provider] ?? (toolEvents[data.provider] = []);
+                const open = [...list].reverse().find((t) => t.running && t.tool === data.tool);
+                if (open) {
+                  open.code = ((open.code ?? "") + (data.text ?? "")).slice(-2000);
+                  setTurns((current) =>
+                    current.map((turn) =>
+                      turn.id === id ? { ...turn, toolEvents: { ...toolEvents } } : turn
+                    )
+                  );
+                }
               } else if (data.type === "tool_result" && data.provider) {
                 const list = toolEvents[data.provider] ?? (toolEvents[data.provider] = []);
                 const open = [...list].reverse().find((t) => t.running && t.tool === data.tool);
@@ -558,6 +873,7 @@ export default function Ask() {
         })
       );
       api.listConversations().then(setConversations).catch(() => {});
+      api.getAskUsage().then(setAskUsage).catch(() => {});
     } catch (err: any) {
       setTurns((current) =>
         current.map((turn) => turn.id === id ? { id, question: normalized, error: err.message || "Search failed." } : turn)
@@ -781,15 +1097,27 @@ export default function Ask() {
                 No past conversations
               </div>
             ) : (
-              conversations.map((conv) => (
+              orderedConversations().map(({ conv, depth }) => (
                 <div
                   key={conv.id}
                   className={`ask-conv-item ${conv.id === activeConvId ? "is-active" : ""}`}
                   onClick={() => selectConversation(conv.id)}
+                  style={depth > 0 ? { marginLeft: `${Math.min(depth, 4) * 14}px` } : undefined}
                 >
                   <div className="ask-conv-title" title={conv.title}>
-                    <MessageSquare size={14} style={{ flexShrink: 0 }} />
-                    <span>{conv.title || "Untitled conversation"}</span>
+                    {depth > 0 ? (
+                      <span style={{ flexShrink: 0, color: "var(--brand)", fontSize: "13px" }}>↳</span>
+                    ) : (
+                      <span style={{ flexShrink: 0, color: "var(--text-muted)", fontSize: "12px" }}>☐</span>
+                    )}
+                    <span>
+                      {conv.title || "Untitled conversation"}
+                      {depth > 0 && (conv.branched_from?.length ?? 0) > 0 && (
+                        <span style={{ display: "block", fontSize: "9px", letterSpacing: "0.08em", color: "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace", textTransform: "uppercase" }}>
+                          continued from {conv.branched_from!.map((b) => b.provider).filter(Boolean).join(" + ")}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -848,12 +1176,60 @@ export default function Ask() {
                     >
                       <div className="user-message">
                         <span className="avatar is-small">PA</span>
-                        <div>{turn.question}</div>
+                        <div>
+                          {turn.question}
+                          {(() => {
+                            const n = Object.keys(turn.providerChunks ?? {}).filter((k) => k !== "Notice").length;
+                            if (n === 0) return null;
+                            const when = turn.startedAt
+                              ? new Date(turn.startedAt).toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase()
+                              : "";
+                            const state = turn.pending
+                              ? `RUNNING ${n} MODEL${n > 1 ? "S" : ""} IN PARALLEL`
+                              : `${n} MODEL${n > 1 ? "S" : ""} RUN${turn.chosenProvider ? " · 1 SELECTED" : ""}`;
+                            return (
+                              <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.66rem", letterSpacing: "0.06em", color: "var(--text-muted)", marginTop: "0.25rem", fontWeight: 400 }}>
+                                {when && `${when} · `}{state}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
 
                       <div className="assistant-message">
                         <span className="assistant-avatar"><Bot size={18} /></span>
                         <div className="assistant-card">
+                          {turn.evidence && (turn.evidence.grounding || turn.evidence.sources.length > 0 || (turn.evidence.routes?.[0]?.label ?? "") !== "0 passages") && (
+                            <div style={{ border: "1px solid var(--line)", borderRadius: "9px", padding: "0.65rem 0.8rem", marginBottom: "0.8rem", background: "var(--surface-50)" }}>
+                              <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.64rem", letterSpacing: "0.14em", color: "var(--text-muted)" }}>EVIDENCE PACK</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.45rem", alignItems: "center" }}>
+                                {turn.evidence.sources.map((src) => (
+                                  <span key={src} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", border: "1px solid var(--line)", background: "var(--surface, #fff)", borderRadius: "7px", padding: "0.25rem 0.55rem", fontSize: "0.74rem", fontWeight: 500 }}>
+                                    <span style={{ color: "var(--brand)" }}>▣</span> {src}
+                                  </span>
+                                ))}
+                                {turn.evidence.routes.map((r, i) => (
+                                  <span key={i} style={{ border: "1px solid var(--line)", borderRadius: "999px", padding: "0.2rem 0.6rem", fontSize: "0.68rem", fontWeight: 600, color: "var(--brand)" }}>
+                                    <span style={{ fontFamily: "IBM Plex Mono, monospace", opacity: 0.75, marginRight: "0.3rem" }}>{r.kind}</span>{r.label}
+                                  </span>
+                                ))}
+                                {turn.evidence.drive_files.map((f) => (
+                                  <span key={f} style={{ border: "1px solid var(--line)", borderRadius: "7px", padding: "0.25rem 0.55rem", fontSize: "0.74rem" }}>☁ {f}</span>
+                                ))}
+                              </div>
+                              {turn.evidence.grounding && (
+                                <details style={{ marginTop: "0.5rem" }}>
+                                  <summary style={{ cursor: "pointer", fontFamily: "IBM Plex Mono, monospace", fontSize: "0.64rem", letterSpacing: "0.12em", color: "var(--text-muted)" }}>
+                                    RAG CONTEXT · sent to every enabled model
+                                  </summary>
+                                  <div style={{ fontSize: "0.8rem", lineHeight: 1.55, color: "var(--text-muted)", marginTop: "0.4rem" }}>{turn.evidence.grounding}…</div>
+                                  <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.62rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
+                                    Identical context per model — retrieval only, no direct store access.
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          )}
                           {turn.pending && !turn.response && (
                             <div className="answer-loading">
                               <span>Searching authorized documents & sources</span>
@@ -901,6 +1277,42 @@ export default function Ask() {
 
                               <div className="answer-body">
                                 {(!turn.chosenProvider && turn.providerChunks && Object.keys(turn.providerChunks).length > 0) ? (
+                                  <>
+                                  {(() => {
+                                    const ids = Object.keys(turn.providerChunks!).filter((k) => k !== "Notice");
+                                    if (ids.length === 0) return null;
+                                    const allPicked = ids.every((k) => turn.picked?.[k]);
+                                    return (
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.9rem" }}>
+                                        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.66rem", letterSpacing: "0.14em", color: "var(--text-muted)" }}>
+                                          {ids.length} ANSWER{ids.length > 1 ? "S" : ""}
+                                        </span>
+                                        <span style={{ flex: 1 }} />
+                                        {!turn.pending && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              className="button is-small"
+                                              onClick={() =>
+                                                setTurns((current) =>
+                                                  current.map((t) =>
+                                                    t.id === turn.id
+                                                      ? { ...t, picked: allPicked ? {} : Object.fromEntries(ids.map((k) => [k, true])) }
+                                                      : t
+                                                  )
+                                                )
+                                              }
+                                            >
+                                              {allPicked ? "Clear picks" : "Pick all"}
+                                            </button>
+                                            <button type="button" className="button is-small" onClick={() => rerunModels(turn, ids)}>
+                                              ↻ Re-run all
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   <div
                                     className="llm-grid"
                                     style={{
@@ -919,8 +1331,24 @@ export default function Ask() {
                                       <div
                                         key={provider}
                                         className="llm-grid-cell"
+                                        draggable={!turn.pending && provider !== "Notice"}
+                                        onDragStart={(e) => { e.dataTransfer.setData("text/x-docvault-provider", provider); e.dataTransfer.effectAllowed = "move"; }}
+                                        onDragOver={(e) => { e.preventDefault(); }}
+                                        onDrop={(e) => {
+                                          e.preventDefault();
+                                          const from = e.dataTransfer.getData("text/x-docvault-provider");
+                                          if (from && from !== provider) {
+                                            setTurns((current) => current.map((t) => (t.id === turn.id ? { ...t, picked: { [from]: true } } : t)));
+                                            setTimeout(() => secondPass({ ...turn, picked: { [from]: true } }, provider), 0);
+                                          }
+                                        }}
                                         style={{
                                           border: "1px solid var(--line)",
+                                          borderTop: `3px solid ${providerColor(provider) ?? "var(--line)"}`,
+                                          cursor: turn.pending ? undefined : "grab",
+                                          minWidth: 0,
+                                          maxWidth: "100%",
+                                          overflow: "hidden",
                                           padding: "1.1rem",
                                           borderRadius: "10px",
                                           background: "var(--surface-50)",
@@ -957,13 +1385,42 @@ export default function Ask() {
                                             </span>
                                           )}
                                         </div>
+                                        {(turn.runMeta?.[provider]?.passedFrom?.length ?? 0) > 0 && (
+                                          <div style={{ marginBottom: "0.5rem", fontSize: "0.68rem", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "IBM Plex Mono, monospace", color: "var(--brand)", background: "var(--surface-100, rgba(37,99,235,0.07))", border: "1px dashed var(--brand)", borderRadius: "6px", padding: "0.3rem 0.5rem" }}>
+                                            Passed from {turn.runMeta![provider].passedFrom!.join(" + ")}
+                                          </div>
+                                        )}
                                         {(turn.toolEvents?.[provider]?.length ?? 0) > 0 && (
                                           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.6rem" }}>
                                             {turn.toolEvents![provider].map((t, ti) => (
-                                              <div key={ti} style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: t.status === "error" ? "var(--danger, #b3261e)" : "var(--text-muted)", background: "var(--surface-100, rgba(0,0,0,0.03))", border: "1px solid var(--line)", borderRadius: "6px", padding: "0.28rem 0.5rem" }}>
-                                                <span>{t.tool === "search_documents" ? "⌕" : "≣"}</span>
-                                                <span style={{ fontWeight: 600 }}>{t.label}</span>
-                                                <span style={{ marginLeft: "auto" }}>{t.running ? "running…" : t.summary}</span>
+                                              <div key={ti} style={{ fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: t.status === "error" ? "var(--danger, #b3261e)" : "var(--text-muted)", background: "var(--surface-100, rgba(0,0,0,0.03))", border: "1px solid var(--line)", borderRadius: "6px", padding: "0.28rem 0.5rem", minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                                                  <span>{t.tool === "search_documents" ? "⌕" : t.tool === "execute_python" ? "▶" : "≣"}</span>
+                                                  <span style={{ fontWeight: 600 }}>{t.label}</span>
+                                                  <span style={{ marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>{t.running ? (t.code ? "writing code…" : "running…") : t.summary}</span>
+                                                </div>
+                                                {t.running && t.code && (
+                                                  <div
+                                                    style={{
+                                                      marginTop: "0.3rem",
+                                                      height: "3.2em",
+                                                      overflow: "hidden",
+                                                      display: "flex",
+                                                      flexDirection: "column",
+                                                      justifyContent: "flex-end",
+                                                      whiteSpace: "pre",
+                                                      minWidth: 0,
+                                                      maxWidth: "100%",
+                                                      opacity: 0.9,
+                                                      WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 45%, black 80%, rgba(0,0,0,0.35) 100%)",
+                                                      maskImage: "linear-gradient(to bottom, transparent 0%, black 45%, black 80%, rgba(0,0,0,0.35) 100%)",
+                                                    }}
+                                                  >
+                                                    {t.code.replace(/\\n/g, "\n").split("\n").filter(Boolean).slice(-3).map((ln, li) => (
+                                                      <div key={li} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{ln.slice(0, 300)}</div>
+                                                    ))}
+                                                  </div>
+                                                )}
                                               </div>
                                             ))}
                                           </div>
@@ -1002,41 +1459,145 @@ export default function Ask() {
                                           </div>
                                         )}
                                         {!turn.pending && chunk && provider !== "Notice" && (
-                                          <button
-                                            type="button"
-                                            className="button primary is-small"
-                                            style={{ marginTop: "1rem", width: "100%", fontWeight: 600 }}
-                                            onClick={async () => {
-                                              if (!turn.response?.conversation_id) return;
-                                              try {
-                                                await api.selectAnswer(
-                                                  turn.response.conversation_id, chunk, provider,
-                                                  turn.runMeta?.[provider]?.model_id ?? null,
-                                                  turn.runMeta?.[provider]?.metrics ?? null
-                                                );
-                                                setTurns((current) =>
-                                                  current.map((t) =>
-                                                    t.id === turn.id
-                                                      ? { ...t, chosenProvider: provider, response: { ...t.response!, answer: chunk } }
-                                                      : t
+                                          <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                            <button
+                                              type="button"
+                                              className="button is-small"
+                                              title="Copy answer"
+                                              onClick={() => copyText(`${turn.id}:${provider}`, chunk)}
+                                            >
+                                              {copiedKey === `${turn.id}:${provider}` ? "✓ copied" : "⧉ copy"}
+                                            </button>
+                                            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.75rem", color: "var(--text-muted)", cursor: "pointer", userSelect: "none" }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={!!turn.picked?.[provider]}
+                                                onChange={(e) =>
+                                                  setTurns((current) =>
+                                                    current.map((t) =>
+                                                      t.id === turn.id ? { ...t, picked: { ...t.picked, [provider]: e.target.checked } } : t
+                                                    )
                                                   )
-                                                );
-                                              } catch (err) {
-                                                console.error(err);
-                                              }
-                                            }}
-                                          >
-                                            Select {provider}
-                                          </button>
+                                                }
+                                              />
+                                              pick
+                                            </label>
+                                            <button
+                                              type="button"
+                                              className="button primary is-small"
+                                              style={{ flex: 1, fontWeight: 600 }}
+                                              onClick={() => continueWith(turn, provider, chunk)}
+                                            >
+                                              Continue with {provider}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="button is-small"
+                                              title={`Regenerate ${provider}`}
+                                              onClick={() => rerunModels(turn, [provider])}
+                                            >
+                                              ↻
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
                                     ))}
                                   </div>
+                                  {(() => {
+                                    const pickedIds = Object.keys(turn.picked ?? {}).filter((k) => turn.picked![k]);
+                                    if (turn.pending || pickedIds.length === 0) return null;
+                                    const targets = Object.keys(turn.providerChunks ?? {}).filter(
+                                      (t) => t !== "Notice" && !pickedIds.includes(t)
+                                    );
+                                    return (
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.7rem", flexWrap: "wrap", fontSize: "0.8rem" }}>
+                                        <span style={{ color: "var(--text-muted)" }}>
+                                          {pickedIds.length} picked ({pickedIds.join(", ")}) —
+                                        </span>
+                                        <span style={{ color: "var(--text-muted)", fontSize: "0.7rem", width: "100%", order: 99 }}>
+                                          Tip: you can also drag a card onto another model to pass its answer over.
+                                        </span>
+                                        {targets.map((t) => (
+                                          <button key={t} type="button" className="button is-small" onClick={() => secondPass(turn, t)}>
+                                            Send to {t}
+                                          </button>
+                                        ))}
+                                        <button
+                                          type="button"
+                                          className="button is-small"
+                                          onClick={() =>
+                                            setTurns((current) => current.map((x) => (x.id === turn.id ? { ...x, picked: {} } : x)))
+                                          }
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
+                                </>
                                 ) : (
                                   <>
                                     {turn.chosenProvider && (
-                                      <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
-                                        Answer selected from: <strong style={{ textTransform: "capitalize" }}>{turn.chosenProvider}</strong>
+                                      <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "0.5rem", display: "flex", gap: "0.7rem", alignItems: "center" }}>
+                                        <span>
+                                          Answer selected from: <strong style={{ textTransform: "capitalize" }}>{turn.chosenProvider}</strong>
+                                        </span>
+                                        {turn.runMeta?.[turn.chosenProvider]?.metrics && (
+                                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.72rem" }}>
+                                            ${turn.runMeta[turn.chosenProvider].metrics!.cost_usd.toFixed(3)} · {(turn.runMeta[turn.chosenProvider].metrics!.latency_ms / 1000).toFixed(1)}s · {(turn.runMeta[turn.chosenProvider].metrics!.tokens_in + turn.runMeta[turn.chosenProvider].metrics!.tokens_out).toLocaleString()} tok
+                                          </span>
+                                        )}
+                                        {(() => {
+                                          const others = Object.keys(turn.providerChunks ?? {}).filter((k) => k !== "Notice" && k !== turn.chosenProvider);
+                                          return others.length > 0 ? <span style={{ fontSize: "0.75rem" }}>{others.join(" and ")} answers archived</span> : null;
+                                        })()}
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            const convId = turn.response?.conversation_id || activeConvId;
+                                            if (!convId) return;
+                                            try { setComparisonLog((await api.getConversationRuns(convId)).runs); } catch (e) { console.error(e); }
+                                          }}
+                                          style={{ border: "none", background: "none", color: "var(--brand)", cursor: "pointer", fontSize: "0.8rem", padding: 0, textDecoration: "underline" }}
+                                        >
+                                          View comparison log
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Copy selected answer"
+                                          onClick={() => copyText(`${turn.id}:accepted`, turn.response?.answer || turn.providerChunks?.[turn.chosenProvider!] || "")}
+                                          style={{ border: "none", background: "none", color: "var(--brand)", cursor: "pointer", fontSize: "0.8rem", padding: 0, textDecoration: "underline" }}
+                                        >
+                                          {copiedKey === `${turn.id}:accepted` ? "✓ copied" : "⧉ copy"}
+                                        </button>
+                                      </div>
+                                    )}
+                                    {turn.chosenProvider && (turn.artifacts?.[turn.chosenProvider]?.length ?? 0) > 0 && (
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.6rem" }}>
+                                        {turn.artifacts![turn.chosenProvider].map((a) => (
+                                          <button
+                                            key={a.id}
+                                            type="button"
+                                            onClick={() => openArtifact(a)}
+                                            title={`${a.name} · ${(a.size / 1024).toFixed(1)} KB`}
+                                            style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--brand)", background: "var(--surface-50)", color: "var(--brand)", borderRadius: "7px", padding: "0.3rem 0.6rem", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
+                                          >
+                                            <span>▤</span>
+                                            <span style={{ maxWidth: "14rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+                                            <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>Open</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {turn.chosenProvider && (turn.toolEvents?.[turn.chosenProvider]?.length ?? 0) > 0 && (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem" }}>
+                                        {turn.toolEvents![turn.chosenProvider].map((t, ti) => (
+                                          <div key={ti} style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)", background: "var(--surface-100, rgba(0,0,0,0.03))", border: "1px solid var(--line)", borderRadius: "6px", padding: "0.28rem 0.5rem" }}>
+                                            <span>{t.tool === "search_documents" ? "⌕" : t.tool === "execute_python" ? "▶" : "≣"}</span>
+                                            <span style={{ fontWeight: 600 }}>{t.label}</span>
+                                            <span style={{ marginLeft: "auto" }}>{t.summary}</span>
+                                          </div>
+                                        ))}
                                       </div>
                                     )}
                                     {turn.response?.answer ? (
@@ -1101,6 +1662,22 @@ export default function Ask() {
           {modelRegistry.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", padding: "0.45rem 0.15rem" }}>
               <span style={{ fontSize: "0.68rem", fontFamily: "IBM Plex Mono, monospace", letterSpacing: "0.12em", color: "var(--text-muted)" }}>MODELS</span>
+              {askUsage && (
+                <span
+                  title={`Today: ${askUsage.usage.runs} runs · ${askUsage.usage.sandbox_execs} sandbox execs (max ${askUsage.limits.daily_sandbox_execs || "∞"}) · ${askUsage.limits.max_concurrent_runs || "∞"} concurrent`}
+                  style={{
+                    marginLeft: "auto", order: 99, fontSize: "0.68rem", fontFamily: "IBM Plex Mono, monospace",
+                    color: askUsage.limits.daily_cost_usd > 0 && askUsage.usage.cost_usd >= askUsage.limits.daily_cost_usd ? "var(--danger, #b3261e)" : "var(--text-muted)",
+                    border: "1px solid var(--line)", borderRadius: "999px", padding: "0.18rem 0.6rem",
+                  }}
+                >
+                  today ${askUsage.usage.cost_usd.toFixed(2)}
+                  {askUsage.limits.daily_cost_usd > 0 && ` / $${askUsage.limits.daily_cost_usd.toFixed(2)}`}
+                  {" · "}
+                  {(askUsage.usage.tokens / 1000).toFixed(1)}k tok
+                  {askUsage.limits.daily_tokens > 0 && ` / ${(askUsage.limits.daily_tokens / 1000).toFixed(0)}k`}
+                </span>
+              )}
               {modelRegistry.map((p) => {
                 const enabled = providerEnabled[p.provider] !== false;
                 return (
@@ -1385,6 +1962,55 @@ export default function Ask() {
 
         </section>
       </div>
+
+      {comparisonLog && (
+        <div
+          onClick={() => setComparisonLog(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(13,27,47,0.55)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: "3vh 3vw" }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface, #fff)", borderRadius: "12px", width: "min(880px, 94vw)", maxHeight: "84vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "0.7rem 1rem", borderBottom: "1px solid var(--line)" }}>
+              <strong style={{ fontSize: "0.95rem" }}>Comparison log</strong>
+              <span style={{ marginLeft: "0.6rem", fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace" }}>{comparisonLog.length} runs</span>
+              <button type="button" className="button is-small" style={{ marginLeft: "auto" }} onClick={() => setComparisonLog(null)}>Close</button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+              {comparisonLog.map((r) => (
+                <div key={r.id} style={{ border: `1px solid ${r.selected ? "var(--brand)" : "var(--line)"}`, borderRadius: "9px", padding: "0.7rem 0.85rem" }}>
+                  <div style={{ display: "flex", gap: "0.6rem", alignItems: "baseline", flexWrap: "wrap", fontSize: "0.78rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)" }}>
+                    <strong style={{ color: "var(--text)", textTransform: "capitalize", fontSize: "0.85rem" }}>{r.provider}</strong>
+                    <span>{r.display_version || r.model_id}</span>
+                    {r.reasoning !== "none" && <span>reason:{r.reasoning}</span>}
+                    {r.selected && <span style={{ color: "var(--brand)", fontWeight: 700 }}>SELECTED</span>}
+                    {r.passed_from.length > 0 && <span>passed from {r.passed_from.join("+")}</span>}
+                    {r.status === "error" && <span style={{ color: "var(--danger, #b3261e)" }}>error</span>}
+                    <span style={{ marginLeft: "auto" }}>
+                      {((r.metrics?.tokens_in ?? 0) + (r.metrics?.tokens_out ?? 0)).toLocaleString()} tok · ${(r.metrics?.cost_usd ?? 0).toFixed(4)} · {((r.metrics?.latency_ms ?? 0) / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+                  {r.tool_events.filter((t) => t.type === "tool_result").length > 0 && (
+                    <div style={{ marginTop: "0.35rem", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)" }}>
+                      {r.tool_events.filter((t) => t.type === "tool_result").map((t, i) => (
+                        <span key={i} style={{ marginRight: "0.8rem" }}>{t.label}: {t.summary}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ marginTop: "0.45rem", fontSize: "0.85rem", lineHeight: 1.5, maxHeight: "9rem", overflowY: "auto", whiteSpace: "pre-wrap" }}>{r.body}</div>
+                  {r.artifacts.length > 0 && (
+                    <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.45rem", flexWrap: "wrap" }}>
+                      {r.artifacts.map((a) => (
+                        <button key={a.id} type="button" onClick={() => openArtifact(a)} style={{ border: "1px solid var(--brand)", color: "var(--brand)", background: "none", borderRadius: "6px", padding: "0.2rem 0.5rem", fontSize: "0.72rem", cursor: "pointer" }}>
+                          ▤ {a.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {artifactPreview && (
         <div

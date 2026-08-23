@@ -272,6 +272,13 @@ class Settings(BaseSettings):
 
     # Ask AI conversation settings
     ask_ai_max_history_turns: int = 20   # turns loaded per scope window
+    # ── Ask AI runtime budgets (Phase 5). 0 disables the corresponding limit. ──
+    ask_ai_max_concurrent_runs: int = 0
+    ask_ai_daily_cost_limit_usd: float = 0.0
+    ask_ai_daily_token_limit: int = 0
+    ask_ai_daily_sandbox_limit: int = 0
+    ask_ai_tools_enabled: bool = True
+    ask_ai_sandbox_enabled: bool = True
     ask_ai_gdrive_max_docs: int = 5       # hard cap — Google Drive docs to vLLM
 
     # Chunk size for indexing. Larger chunks mean richer per-passage context but

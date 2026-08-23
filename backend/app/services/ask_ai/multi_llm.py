@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from typing import AsyncGenerator
 
@@ -130,13 +131,20 @@ async def _stream_openai_compatible(messages, model_id: str, tools_ctx, *, api_k
                     yield {"text": delta.content}
                 if delta and delta.tool_calls:
                     for tc in delta.tool_calls:
-                        entry = tool_calls.setdefault(tc.index, {"id": "", "name": "", "args": ""})
+                        entry = tool_calls.setdefault(tc.index, {"id": "", "name": "", "args": "", "announced": False})
                         if tc.id:
                             entry["id"] = tc.id
                         if tc.function and tc.function.name:
                             entry["name"] = tc.function.name
+                        if entry["name"] and not entry["announced"]:
+                            entry["announced"] = True
+                            yield {"tool": {"event": "started", "tool": entry["name"],
+                                            "label": tool_defs.TOOL_LABELS.get(entry["name"], entry["name"]),
+                                            "args_summary": "composing…"}}
                         if tc.function and tc.function.arguments:
                             entry["args"] += tc.function.arguments
+                            if entry["announced"]:
+                                yield {"tool_progress": {"tool": entry["name"], "text": tc.function.arguments}}
                 if choice.finish_reason:
                     finish_reason = choice.finish_reason
             usage = getattr(chunk, "usage", None)
@@ -158,8 +166,9 @@ async def _stream_openai_compatible(messages, model_id: str, tools_ctx, *, api_k
             })
             for i, call in enumerate(ordered):
                 label = tool_defs.TOOL_LABELS.get(call["name"], call["name"])
-                yield {"tool": {"event": "started", "tool": call["name"], "label": label,
-                                "args_summary": (call["args"] or "")[:160]}}
+                if not call.get("announced"):
+                    yield {"tool": {"event": "started", "tool": call["name"], "label": label,
+                                    "args_summary": (call["args"] or "")[:160]}}
                 result = await tools_ctx.run(call["name"], call["args"] or "{}", provider=provider)
                 yield {"tool": {"event": "result", "tool": call["name"], "label": label,
                                 "summary": tool_defs.summarize_result(call["name"], result),
@@ -274,13 +283,123 @@ async def _stream_gemini(messages, api_key: str, model_id: str):
         yield {"usage": usage}
 
 
+async def _stream_openai_responses(messages, model_id: str, tools_ctx, *, api_key: str, capabilities: tuple[str, ...] = (), provider: str = "openai", reasoning: str | None = None):
+    """GPT-5.x via /v1/responses — the only OpenAI surface where function
+    tools and reasoning work together (chat completions 400s on that combo)."""
+    from openai import AsyncOpenAI
+
+    from . import tools as tool_defs
+
+    client = AsyncOpenAI(api_key=api_key)
+    system = "\n".join(m["content"] for m in messages if m["role"] == "system")
+    input_items: list = [
+        {"role": m["role"], "content": m["content"]}
+        for m in messages
+        if m["role"] != "system"
+    ]
+    flat_tools = [
+        {
+            "type": "function",
+            "name": t["function"]["name"],
+            "description": t["function"]["description"],
+            "parameters": t["function"]["parameters"],
+        }
+        for t in tool_defs.openai_tool_schemas(capabilities)
+    ] if tools_ctx is not None else None
+
+    usage_acc = {"in": 0, "out": 0}
+    got_usage = False
+    previous_response_id: str | None = None
+
+    for round_no in range(_MAX_TOOL_ROUNDS + 1):
+        kwargs: dict = {"model": model_id, "stream": True}
+        if previous_response_id:
+            kwargs["previous_response_id"] = previous_response_id
+        kwargs["input"] = input_items
+        if system:
+            kwargs["instructions"] = system
+        if reasoning not in (None, "", "none"):
+            kwargs["reasoning"] = {"effort": reasoning}
+        if flat_tools and round_no < _MAX_TOOL_ROUNDS:
+            kwargs["tools"] = flat_tools
+        stream = await client.responses.create(**kwargs)
+
+        calls: list = []
+        response_id = None
+        announced_calls: set = set()
+        async for event in stream:
+            etype = getattr(event, "type", "")
+            if etype == "response.output_text.delta":
+                yield {"text": event.delta}
+            elif etype == "response.output_item.added":
+                item = getattr(event, "item", None)
+                if item is not None and getattr(item, "type", "") == "function_call" and getattr(item, "name", ""):
+                    announced_calls.add(item.name)
+                    yield {"tool": {"event": "started", "tool": item.name,
+                                    "label": tool_defs.TOOL_LABELS.get(item.name, item.name),
+                                    "args_summary": "composing…"}}
+            elif etype == "response.function_call_arguments.delta":
+                if announced_calls:
+                    yield {"tool_progress": {"tool": next(iter(announced_calls)), "text": getattr(event, "delta", "") or ""}}
+            elif etype == "response.completed":
+                resp = event.response
+                response_id = resp.id
+                usage = getattr(resp, "usage", None)
+                if usage:
+                    usage_acc["in"] += getattr(usage, "input_tokens", 0) or 0
+                    usage_acc["out"] += getattr(usage, "output_tokens", 0) or 0
+                    got_usage = True
+                calls = [o for o in (resp.output or []) if getattr(o, "type", "") == "function_call"]
+
+        if calls and tools_ctx is not None:
+            previous_response_id = response_id
+            input_items = []
+            for call in calls:
+                label = tool_defs.TOOL_LABELS.get(call.name, call.name)
+                if call.name not in announced_calls:
+                    yield {"tool": {"event": "started", "tool": call.name, "label": label,
+                                    "args_summary": (call.arguments or "")[:160]}}
+                result = await tools_ctx.run(call.name, call.arguments or "{}", provider=provider)
+                yield {"tool": {"event": "result", "tool": call.name, "label": label,
+                                "summary": tool_defs.summarize_result(call.name, result),
+                                "status": "error" if "error" in result else "ok"}}
+                for art in result.get("_artifacts", []):
+                    yield {"artifact": art}
+                input_items.append({
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": tool_defs.clip_result_json(result),
+                })
+            continue
+        break
+
+    if got_usage:
+        yield {"usage": usage_acc}
+
+
+_THOUGHT_RE = re.compile(r"(?i)^\s*(?:thought|thinking)\s*:?\s*\n")
+
 _TOOL_CALL_PREFIX = "TOOL_CALL:"
+# Models get the format wrong in every way imaginable: tool_call:, Tool Call:,
+# CALL:search_documents inside fences… match tolerantly, case-insensitively.
+# Anchored to a known tool name (or the legacy JSON form) so ordinary prose
+# containing the word "call:" is never swallowed as a tool call.
+_TOOL_CALL_RE = re.compile(
+    r"(?i)(?:tool[_ ]?)?call\s*:\s*"
+    r"(?=\{|\"?(?:execute_python|search_documents|list_documents)\b)"
+)
 
 
 def _prompted_tools_instructions(schemas: list[dict]) -> str:
     lines = [
-        "\n\nTOOLS AVAILABLE. To call a tool, reply with ONLY one line and nothing else:",
-        'TOOL_CALL: {"name": "<tool_name>", "arguments": {...}}',
+        "\n\nTOOLS AVAILABLE. To call a tool, your ENTIRE reply must be:",
+        "TOOL_CALL: <tool_name>",
+        '{"<arg>": <value>, ...}',
+        "For execute_python, instead of JSON put the code in a fenced block:",
+        "TOOL_CALL: execute_python",
+        "```python",
+        "<your code>",
+        "```",
         "You will receive the result as a message starting with TOOL_RESULT, then continue.",
         "When you can answer, reply normally WITHOUT the TOOL_CALL prefix. Tools:",
     ]
@@ -288,6 +407,50 @@ def _prompted_tools_instructions(schemas: list[dict]) -> str:
         fn = t["function"]
         lines.append(f'- {fn["name"]}: {fn["description"]} Parameters JSON schema: {json.dumps(fn["parameters"])}')
     return "\n".join(lines)
+
+
+def _parse_prompted_tool_call(full: str) -> tuple[str, str] | None:
+    """Parse 'TOOL_CALL: name' + JSON args or fenced code. Returns (name, args_json)."""
+    text = full.lstrip()
+    m = _TOOL_CALL_RE.match(text)
+    if m is None:
+        return None
+    first_line, _, rest = text[m.end():].partition("\n")
+    name = first_line.strip().strip('"{}:,')
+    rest = rest.strip()
+    # Legacy single-line form: TOOL_CALL: {"name": ..., "arguments": {...}}
+    if not name and text[m.end():].lstrip().startswith("{"):
+        raw = text[m.end():].lstrip()
+        try:
+            payload, _ = json.JSONDecoder().raw_decode(raw)
+            if isinstance(payload, dict) and payload.get("name"):
+                return str(payload["name"]), json.dumps(payload.get("arguments") or {})
+        except (json.JSONDecodeError, ValueError):
+            return None
+    if not name:
+        return None
+    # Fenced code block → execute_python style args
+    if "```" in rest:
+        fence = rest.split("```", 2)
+        if len(fence) >= 2:
+            code = fence[1]
+            if code.startswith(("python\n", "python\r\n")):
+                code = code.partition("\n")[2]
+            elif code.startswith("python"):
+                code = code[len("python"):]
+            return name, json.dumps({"code": code.strip("\n")})
+    if rest.startswith("{"):
+        try:
+            payload, _ = json.JSONDecoder().raw_decode(rest)
+            if isinstance(payload, dict):
+                if "name" in payload and "arguments" in payload:
+                    return str(payload["name"]) or name, json.dumps(payload.get("arguments") or {})
+                return name, json.dumps(payload)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    if not rest:
+        return name, "{}"
+    return None
 
 
 async def _stream_vllm_prompted_tools(messages, model_id: str, tools_ctx, *, base_url: str, capabilities: tuple[str, ...] = (), provider: str = "vllm"):
@@ -321,10 +484,15 @@ async def _stream_vllm_prompted_tools(messages, model_id: str, tools_ctx, *, bas
             model=model_id, messages=msgs, stream=True, temperature=0.2,
             max_tokens=1024, stream_options={"include_usage": True},
         )
-        buffer = ""
-        decided = False
-        is_tool = False
+        # Detect TOOL_CALL anywhere in the stream: emit visible text with a
+        # small holdback so the marker never leaks to the card, then swallow
+        # everything from the marker onward as the tool call.
         full = ""
+        streamed = 0
+        is_tool = False
+        tool_start = -1
+        announced_tool = None  # tool_started emitted early, as soon as the name is known
+        holdback = len(_TOOL_CALL_PREFIX) + 8
         async for chunk in stream:
             usage = getattr(chunk, "usage", None)
             if usage:
@@ -337,43 +505,77 @@ async def _stream_vllm_prompted_tools(messages, model_id: str, tools_ctx, *, bas
             if not text:
                 continue
             full += text
-            if not decided:
-                buffer += text
-                probe = buffer.lstrip()
-                if len(probe) >= len(_TOOL_CALL_PREFIX) or "\n" in buffer:
-                    decided = True
-                    is_tool = probe.startswith(_TOOL_CALL_PREFIX)
-                    if not is_tool:
-                        yield {"text": buffer}
-            elif not is_tool:
-                yield {"text": text}
-        if not decided and buffer:
-            is_tool = buffer.lstrip().startswith(_TOOL_CALL_PREFIX)
-            if not is_tool:
-                yield {"text": buffer}
+            if is_tool:
+                continue
+            match = _TOOL_CALL_RE.search(full)
+            if match is not None:
+                is_tool = True
+                tool_start = match.start()
+                tool_body_at = match.end()
+                # Emit clean preamble (drop an opening code fence before the call).
+                preamble = full[streamed:tool_start].rstrip()
+                if streamed == 0:
+                    preamble = _THOUGHT_RE.sub("", preamble)
+                if preamble.endswith("```python"):
+                    preamble = preamble[: -len("```python")].rstrip()
+                if preamble.endswith("```"):
+                    preamble = preamble[:-3].rstrip()
+                if preamble:
+                    yield {"text": preamble}
+                streamed = len(full)
+            else:
+                safe = len(full) - holdback
+                if safe > streamed:
+                    if streamed == 0:
+                        # Hold the very first flush until a newline (or enough
+                        # text) so a leading gemma "thought" line can be dropped.
+                        if "\n" not in full[:safe] and safe < 60:
+                            continue
+                        head = _THOUGHT_RE.sub("", full[:safe])
+                        if head:
+                            yield {"text": head}
+                        streamed = safe
+                    else:
+                        yield {"text": full[streamed:safe]}
+                        streamed = safe
+            if is_tool and announced_tool is None:
+                # Announce the tool row live so the card shows progress while
+                # the model is still streaming the (hidden) code block.
+                first_line, nl, _ = full[tool_body_at:].partition("\n")
+                if nl:
+                    name = first_line.strip().strip('"{}:,')
+                    if name:
+                        announced_tool = name
+                        progress_sent = len(full)
+                        yield {"tool": {"event": "started", "tool": name,
+                                        "label": tool_defs.TOOL_LABELS.get(name, name),
+                                        "args_summary": "composing…"}}
+            elif is_tool and announced_tool is not None:
+                if len(full) > progress_sent:
+                    yield {"tool_progress": {"tool": announced_tool, "text": full[progress_sent:]}}
+                    progress_sent = len(full)
+        if not is_tool and streamed < len(full):
+            tail = full[streamed:]
+            if streamed == 0:
+                tail = _THOUGHT_RE.sub("", tail)
+            yield {"text": tail}
         if not is_tool:
             break
-        # Parse the tool call
-        raw = full.lstrip()[len(_TOOL_CALL_PREFIX):].strip()
-        start = raw.find("{")
-        call_name, call_args = "", "{}"
-        if start >= 0:
-            payload = None
-            for candidate in (raw[start:], raw[start:raw.rfind("}") + 1]):
-                try:
-                    payload = json.loads(candidate)
-                    break
-                except (json.JSONDecodeError, ValueError):
-                    continue
-            if isinstance(payload, dict):
-                call_name = str(payload.get("name", ""))
-                call_args = json.dumps(payload.get("arguments") or {})
-        if not call_name:
-            yield {"text": "\n[tool call could not be parsed]"}
-            break
+        parsed = _parse_prompted_tool_call(full[tool_start:])
+        if parsed is None:
+            _log.warning("vllm prompted tool call unparseable: %r", full[:300])
+            msgs.append({"role": "assistant", "content": full})
+            msgs.append({"role": "user",
+                         "content": "Your TOOL_CALL could not be parsed. Follow the exact format: "
+                                    "first line 'TOOL_CALL: <name>', then JSON arguments on the next "
+                                    "line, or a ```python fenced block for execute_python. Try again "
+                                    "or answer directly."})
+            continue
+        call_name, call_args = parsed
         label = tool_defs.TOOL_LABELS.get(call_name, call_name)
-        yield {"tool": {"event": "started", "tool": call_name, "label": label,
-                        "args_summary": call_args[:160]}}
+        if announced_tool != call_name:
+            yield {"tool": {"event": "started", "tool": call_name, "label": label,
+                            "args_summary": call_args[:160]}}
         result = await tools_ctx.run(call_name, call_args, provider=provider)
         yield {"tool": {"event": "result", "tool": call_name, "label": label,
                         "summary": tool_defs.summarize_result(call_name, result),
@@ -390,9 +592,16 @@ async def _stream_vllm_prompted_tools(messages, model_id: str, tools_ctx, *, bas
 
 
 _STREAMS = {
-    "openai": lambda messages, model_id, tools_ctx, caps, reasoning: _stream_openai_compatible(
-        messages, model_id, tools_ctx,
-        api_key=_key("openai_api_key", "DOCVAULT_OPENAI_API_KEY", "OPENAI_API_KEY"), capabilities=caps, provider="openai", reasoning=reasoning),
+    "openai": lambda messages, model_id, tools_ctx, caps, reasoning: (
+        _stream_openai_responses(
+            messages, model_id, tools_ctx,
+            api_key=_key("openai_api_key", "DOCVAULT_OPENAI_API_KEY", "OPENAI_API_KEY"),
+            capabilities=caps, provider="openai", reasoning=reasoning)
+        if model_id.startswith(("gpt-5", "o1", "o3", "o4"))
+        else _stream_openai_compatible(
+            messages, model_id, tools_ctx,
+            api_key=_key("openai_api_key", "DOCVAULT_OPENAI_API_KEY", "OPENAI_API_KEY"),
+            capabilities=caps, provider="openai", reasoning=reasoning)),
     "claude": lambda messages, model_id, tools_ctx, caps, reasoning: _stream_anthropic(
         messages, _key("anthropic_api_key", "DOCVAULT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"), model_id, tools_ctx, capabilities=caps, provider="claude", reasoning=reasoning),
     # Gemini runs text-only in Phase 2 (function-calling and thinking-budget
@@ -431,6 +640,8 @@ async def _run_model(
             if "text" in event:
                 out_chars += len(event["text"])
                 yield {"type": "chunk", "provider": provider, "chunk": event["text"]}
+            elif "tool_progress" in event:
+                yield {"type": "tool_progress", "provider": provider, **event["tool_progress"]}
             elif "artifact" in event:
                 yield {"type": "artifact", "provider": provider, **event["artifact"]}
             elif "tool" in event:

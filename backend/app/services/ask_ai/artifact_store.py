@@ -22,7 +22,10 @@ _log = logging.getLogger(__name__)
 
 _COLLECTION = "ask_ai_artifacts"
 
-_ALLOWED_MIME_PREFIXES = ("text/", "image/", "application/pdf", "application/json")
+_ALLOWED_MIME_PREFIXES = (
+    "text/", "image/", "application/pdf", "application/json",
+    "application/vnd.openxmlformats-officedocument.",  # pptx/xlsx/docx
+)
 _DEFAULT_MIME = "application/octet-stream"
 
 
@@ -32,7 +35,19 @@ def _root() -> str:
     return root
 
 
+_EXT_MIME = {
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+}
+
+
 def guess_mime(name: str) -> str:
+    ext = os.path.splitext(name)[1].lower()
+    if ext in _EXT_MIME:
+        return _EXT_MIME[ext]
     mime = mimetypes.guess_type(name)[0] or _DEFAULT_MIME
     if mime == "text/html":
         return "text/html"

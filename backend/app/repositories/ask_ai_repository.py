@@ -29,6 +29,7 @@ _USERS = "ask_ai_users"
 _CONVERSATIONS = "ask_ai_conversations"
 _HISTORY = "ask_ai_conversation_history"
 _TURN_RUNS = "ask_ai_turn_runs"
+_USAGE = "ask_ai_daily_usage"
 
 
 def _now() -> datetime:
@@ -356,6 +357,7 @@ async def append_turn_runs(
                 status="error" if run.get("status") == "error" else "ok",
                 tool_events=list(run.get("tool_events") or []),
                 artifacts=list(run.get("artifacts") or []),
+                passed_from=list(run.get("passed_from") or []),
                 metrics=RunMetrics(**(run.get("metrics") or {})),
             )
             docs.append(doc.model_dump(by_alias=True))
@@ -399,3 +401,142 @@ async def list_turn_runs(db, conversation_id: str, user_id: int) -> list[dict]:
     except Exception as exc:
         _log.warning("list_turn_runs failed: %s", exc)
         return []
+
+
+# ── Conversation branching (DAG) ──────────────────────────────────────────────
+
+
+async def branch_conversation(
+    db,
+    parent_id: str,
+    user_id: int,
+    *,
+    sources: list[dict],
+    title: str,
+    enabled_models: list[dict] | None = None,
+) -> str | None:
+    """Fork a child conversation from ``parent_id``.
+
+    The full parent history (spec §2.1: including context, in order) is
+    denormalized into the child so purging the parent cannot orphan it.
+    ``sources`` = [{provider, model_id, turn_message_id}] the branch was
+    continued from.
+    """
+    if db is None:
+        return None
+    try:
+        parent = await db[_CONVERSATIONS].find_one({"_id": parent_id, "user_id": user_id})
+        if parent is None:
+            return None
+        child_id = _uid()
+        now = _now()
+        child = dict(parent)
+        child.update({
+            "_id": child_id,
+            "title": title[:80],
+            "created_at": now,
+            "last_message_at": now,
+            "parent_ids": [parent_id],
+            "branched_from": [
+                {
+                    "conversation_id": parent_id,
+                    "turn_message_id": source.get("turn_message_id"),
+                    "provider": source.get("provider"),
+                    "model_id": source.get("model_id"),
+                }
+                for source in sources
+            ],
+            "enabled_models": enabled_models,
+        })
+        await db[_CONVERSATIONS].insert_one(child)
+        # Denormalize parent history into the child.
+        cursor = db[_HISTORY].find(
+            {"conversation_id": parent_id, "user_id": user_id}
+        ).sort("created_at", 1)
+        docs = []
+        id_map: dict[str, str] = {}
+        async for msg in cursor:
+            copy = dict(msg)
+            new_id = _uid()
+            id_map[copy["_id"]] = new_id
+            copy["_id"] = new_id
+            copy["conversation_id"] = child_id
+            copy["inherited_from"] = parent_id
+            docs.append(copy)
+        if docs:
+            await db[_HISTORY].insert_many(docs)
+        # Copy the model runs too (remapped to the child's message ids) so the
+        # child restores full cards — artifacts, tools, metrics — not just text.
+        run_docs = []
+        run_cursor = db[_TURN_RUNS].find(
+            {"conversation_id": parent_id, "user_id": user_id}
+        ).sort("created_at", 1)
+        async for run in run_cursor:
+            copy = dict(run)
+            copy["_id"] = _uid()
+            copy["conversation_id"] = child_id
+            copy["turn_message_id"] = id_map.get(copy.get("turn_message_id", ""), "")
+            run_docs.append(copy)
+        if run_docs:
+            await db[_TURN_RUNS].insert_many(run_docs)
+        return child_id
+    except Exception as exc:
+        _log.warning("branch_conversation failed: %s", exc)
+        return None
+
+
+# ── Daily usage counters (Phase 5 budgets) ────────────────────────────────────
+
+
+def _usage_key(user_id: int) -> str:
+    return f"{user_id}:{_now().strftime('%Y-%m-%d')}"
+
+
+async def get_daily_usage(db, user_id: int) -> dict:
+    """Today's Ask AI usage for a user (UTC day)."""
+    if db is None:
+        return {"cost_usd": 0.0, "tokens": 0, "runs": 0, "sandbox_execs": 0}
+    try:
+        doc = await db[_USAGE].find_one({"_id": _usage_key(user_id)}) or {}
+        return {
+            "cost_usd": float(doc.get("cost_usd", 0.0)),
+            "tokens": int(doc.get("tokens", 0)),
+            "runs": int(doc.get("runs", 0)),
+            "sandbox_execs": int(doc.get("sandbox_execs", 0)),
+        }
+    except Exception as exc:
+        _log.warning("get_daily_usage failed: %s", exc)
+        return {"cost_usd": 0.0, "tokens": 0, "runs": 0, "sandbox_execs": 0}
+
+
+async def add_daily_usage(
+    db, user_id: int, *, cost_usd: float = 0.0, tokens: int = 0,
+    runs: int = 0, sandbox_execs: int = 0,
+) -> None:
+    if db is None:
+        return
+    try:
+        await db[_USAGE].update_one(
+            {"_id": _usage_key(user_id)},
+            {"$inc": {"cost_usd": cost_usd, "tokens": tokens, "runs": runs,
+                      "sandbox_execs": sandbox_execs},
+             "$setOnInsert": {"user_id": user_id, "created_at": _now()}},
+            upsert=True,
+        )
+    except Exception as exc:
+        _log.warning("add_daily_usage failed: %s", exc)
+
+
+async def get_latest_user_message_id(db, conversation_id: str, user_id: int) -> str | None:
+    """The _id of the most recent user message in a conversation."""
+    if db is None:
+        return None
+    try:
+        doc = await db[_HISTORY].find_one(
+            {"conversation_id": conversation_id, "user_id": user_id, "role": "user"},
+            sort=[("created_at", -1)],
+        )
+        return doc["_id"] if doc else None
+    except Exception as exc:
+        _log.warning("get_latest_user_message_id failed: %s", exc)
+        return None

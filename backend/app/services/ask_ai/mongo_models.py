@@ -97,6 +97,13 @@ class MongoConversation(BaseModel):
     # Source configuration — company_kb is ALWAYS True; drive is opt-in per turn
     company_kb_enabled: bool = True
     google_drive_enabled: bool = False
+    # Conversation DAG (spec §2.1): parents this conversation was branched from
+    parent_ids: list[str] = Field(default_factory=list)
+    # [{conversation_id, turn_message_id, provider, model_id}] — the accepted
+    # answers this branch was continued from ("CONTINUED FROM Gemini + Claude")
+    branched_from: list[dict] = Field(default_factory=list)
+    # Model set chosen at branch time; None = whatever the UI has enabled
+    enabled_models: list[dict] | None = None
 
     class Config:
         populate_by_name = True
@@ -139,6 +146,7 @@ class MongoTurnRun(BaseModel):
     status: Literal["ok", "error"] = "ok"
     tool_events: list[dict] = Field(default_factory=list)
     artifacts: list[dict] = Field(default_factory=list)
+    passed_from: list[str] = Field(default_factory=list)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     selected: bool = False
     created_at: datetime = Field(default_factory=_now)
@@ -158,6 +166,8 @@ class MongoHistoryMessage(BaseModel):
     user_id: int
     role: Literal["user", "assistant"]
     content: str
+    # Set when this message was copied from a parent conversation at branch time
+    inherited_from: str | None = None
     # Model attribution + metrics for selected assistant answers (v2)
     provider: str | None = None
     model_id: str | None = None

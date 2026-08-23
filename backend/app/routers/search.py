@@ -245,6 +245,8 @@ async def ask(
         company_kb_enabled=payload.company_kb_enabled,
         google_drive_enabled=payload.google_drive_enabled,
         model_selections=payload.models,
+        passed_answers=payload.passed_answers,
+        rerun=payload.rerun,
         context=get_request_context(request),
     )
     return StreamingResponse(stream_gen, media_type="text/event-stream")
@@ -257,6 +259,26 @@ def ask_models(user: models.User = Depends(require("VIEW"))):
     from ..services.ask_ai.multi_llm import get_configured_providers
 
     return {"providers": model_registry.to_public(model_registry.available_providers(get_configured_providers()))}
+
+
+@router.get("/ask/usage")
+async def ask_usage(user: models.User = Depends(require("VIEW"))):
+    """Today's Ask AI usage vs the configured budgets (0 = unlimited)."""
+    from ..mongodb import get_db as _mongo
+    from ..repositories import ask_ai_repository
+
+    usage = await ask_ai_repository.get_daily_usage(_mongo(), user.id)
+    return {
+        "usage": usage,
+        "limits": {
+            "daily_cost_usd": settings.ask_ai_daily_cost_limit_usd,
+            "daily_tokens": settings.ask_ai_daily_token_limit,
+            "daily_sandbox_execs": settings.ask_ai_daily_sandbox_limit,
+            "max_concurrent_runs": settings.ask_ai_max_concurrent_runs,
+        },
+        "tools_enabled": settings.ask_ai_tools_enabled,
+        "sandbox_enabled": settings.ask_ai_sandbox_enabled,
+    }
 
 
 @router.get("/ask/artifacts/{artifact_id}")
@@ -345,6 +367,8 @@ async def list_conversations(
             last_message_at=c.get("last_message_at"),
             company_kb_enabled=c.get("company_kb_enabled", True),
             google_drive_enabled=c.get("google_drive_enabled", False),
+            parent_ids=c.get("parent_ids") or [],
+            branched_from=c.get("branched_from") or [],
         )
         for c in convs
     ]
@@ -413,6 +437,9 @@ async def get_conversation(
             content=m["content"],
             created_at=m["created_at"],
             sources_used=m.get("sources_used"),
+            provider=m.get("provider"),
+            model_id=m.get("model_id"),
+            evidence=m.get("evidence"),
         )
         for m in history_docs
     ]
@@ -440,6 +467,9 @@ async def get_conversation(
         active_scope=active_scope_info,
         company_kb_enabled=conv.company_kb_enabled,
         google_drive_enabled=conv.google_drive_enabled,
+        parent_ids=conv.parent_ids,
+        branched_from=conv.branched_from,
+        enabled_models=conv.enabled_models,
         messages=messages,
     )
 
@@ -479,6 +509,57 @@ async def delete_conversation(
 
 
 # ── OKF bundle management ─────────────────────────────────────────────────────
+
+
+@router.post("/conversations/{conversation_id}/branch", response_model=schemas.BranchOut)
+async def branch_conversation(
+    conversation_id: str,
+    payload: schemas.BranchRequest,
+    user: models.User = Depends(require("VIEW")),
+    db: Session = Depends(get_db),
+):
+    """'Continue with {model}': accept picked answer(s) and fork a child conversation."""
+    from ..services.exceptions import NotFoundError, ServiceError
+
+    try:
+        return await search_application_service.branch_conversation(db, user, conversation_id, payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@router.get("/conversations/{conversation_id}/runs")
+async def conversation_runs(
+    conversation_id: str,
+    user: models.User = Depends(require("VIEW")),
+):
+    """Comparison log: every persisted model run of a conversation."""
+    from ..mongodb import get_db as _mongo
+    from ..repositories import ask_ai_repository
+
+    runs = await ask_ai_repository.list_turn_runs(_mongo(), conversation_id, user.id)
+    return {
+        "runs": [
+            {
+                "id": r.get("_id"),
+                "turn_message_id": r.get("turn_message_id"),
+                "provider": r.get("provider"),
+                "model_id": r.get("model_id"),
+                "display_version": r.get("display_version"),
+                "reasoning": r.get("reasoning", "none"),
+                "status": r.get("status"),
+                "body": r.get("body", ""),
+                "selected": bool(r.get("selected")),
+                "passed_from": r.get("passed_from", []),
+                "tool_events": r.get("tool_events", []),
+                "artifacts": r.get("artifacts", []),
+                "metrics": r.get("metrics", {}),
+                "created_at": r.get("created_at"),
+            }
+            for r in runs
+        ]
+    }
 
 
 @router.get("/okf/status", tags=["okf"])

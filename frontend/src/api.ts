@@ -228,6 +228,8 @@ export interface ConversationSummary {
   last_message_at: string;
   company_kb_enabled: boolean;
   google_drive_enabled: boolean;
+  parent_ids?: string[];
+  branched_from?: { conversation_id?: string; provider?: string; model_id?: string }[];
 }
 
 export interface ConversationMessage {
@@ -246,6 +248,9 @@ export interface ConversationDetail {
   active_scope: ActiveScopeInfo;
   company_kb_enabled: boolean;
   google_drive_enabled: boolean;
+  parent_ids?: string[];
+  branched_from?: { conversation_id?: string; provider?: string; model_id?: string }[];
+  enabled_models?: { provider: string; model_id?: string | null; reasoning?: string | null }[] | null;
   messages: ConversationMessage[];
 }
 
@@ -556,6 +561,14 @@ export const api = {
 
   getAskModels: () => req<{ providers: AskProviderInfo[] }>("/search/ask/models"),
 
+  getAskUsage: () =>
+    req<{
+      usage: { cost_usd: number; tokens: number; runs: number; sandbox_execs: number };
+      limits: { daily_cost_usd: number; daily_tokens: number; daily_sandbox_execs: number; max_concurrent_runs: number };
+      tools_enabled: boolean;
+      sandbox_enabled: boolean;
+    }>("/search/ask/usage"),
+
   askStream: async (
     question: string,
     document_id?: number | null,
@@ -563,7 +576,9 @@ export const api = {
     conversation_id?: string | null,
     company_kb_enabled = true,
     google_drive_enabled = false,
-    models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null
+    models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null,
+    passed_answers?: { provider: string; model_id?: string | null; content: string }[] | null,
+    rerun?: boolean
   ) => {
     const headers = new Headers({ "Content-Type": "application/json" });
     const token = getToken();
@@ -579,11 +594,34 @@ export const api = {
         company_kb_enabled,
         google_drive_enabled,
         models: models ?? null,
+        passed_answers: passed_answers ?? null,
+        rerun: rerun ?? false,
       }),
     });
     if (!res.ok) throw new ApiError(res.status, "Ask stream failed");
     return res;
   },
+
+  getConversationRuns: (conversation_id: string) =>
+    req<{ runs: {
+      id: string; turn_message_id: string; provider: string; model_id: string;
+      display_version: string; reasoning: string; status: string; body: string;
+      selected: boolean; passed_from: string[];
+      tool_events: { type: string; tool: string; label: string; summary?: string; status?: string }[];
+      artifacts: { id: string; name: string; mime: string; size: number }[];
+      metrics: AskRunMetrics; created_at: string;
+    }[] }>(`/search/conversations/${encodeURIComponent(conversation_id)}/runs`),
+
+  branchConversation: (
+    conversation_id: string,
+    sources: { provider: string; model_id?: string | null; content: string }[],
+    enabled_models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null
+  ) =>
+    req<{ conversation_id: string; title: string }>(`/search/conversations/${encodeURIComponent(conversation_id)}/branch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sources, enabled_models: enabled_models ?? null }),
+    }),
 
   selectAnswer: (conversation_id: string, chosen_answer: string, provider: string, model_id?: string | null, metrics?: AskRunMetrics | null) =>
     req<{ status: string }>("/search/ask/select", {

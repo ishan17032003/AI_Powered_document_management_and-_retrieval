@@ -326,10 +326,23 @@ class ModelSelection(RequestModel):
     reasoning: Literal["none", "low", "medium", "high"] | None = None
 
 
+class PassedAnswer(RequestModel):
+    """A picked answer passed to another model for a second pass."""
+
+    provider: str = Field(min_length=1, max_length=32)
+    model_id: str | None = Field(default=None, max_length=128)
+    content: str = Field(min_length=1, max_length=20000)
+
+
 class AskQuery(RequestModel):
     question: str = Field(min_length=1, max_length=4000)
     # Per-run model selection; None = every configured provider at default version
     models: list[ModelSelection] | None = Field(default=None, max_length=8)
+    # Second pass: answers from other models passed to the selected model(s).
+    # When set, the turn is a re-run — no new user message is appended.
+    passed_answers: list[PassedAnswer] | None = Field(default=None, max_length=4)
+    # Re-run of an existing turn (regenerate / re-run all): no new user message.
+    rerun: bool = False
     document_id: int | None = Field(default=None, gt=0)
     history: list[ChatMessage] | None = Field(default=None, max_length=20)
     # Conversational session management
@@ -412,6 +425,26 @@ class ConversationOut(BaseModel):
     last_message_at: datetime
     company_kb_enabled: bool = True
     google_drive_enabled: bool = False
+    parent_ids: list[str] = Field(default_factory=list)
+    branched_from: list[dict] = Field(default_factory=list)
+
+
+class BranchSource(BaseModel):
+    provider: str = Field(min_length=1, max_length=32)
+    model_id: str | None = Field(default=None, max_length=128)
+    content: str = Field(min_length=1, max_length=40000)
+
+
+class BranchRequest(BaseModel):
+    """Fork a child conversation from accepted answer(s) of the latest turn."""
+
+    sources: list[BranchSource] = Field(min_length=1, max_length=4)
+    enabled_models: list[ModelSelection] | None = Field(default=None, max_length=8)
+
+
+class BranchOut(BaseModel):
+    conversation_id: str
+    title: str
 
 
 class ConversationMessageOut(BaseModel):
@@ -420,6 +453,9 @@ class ConversationMessageOut(BaseModel):
     content: str
     created_at: datetime
     sources_used: dict[str, bool] | None = None
+    provider: str | None = None
+    model_id: str | None = None
+    evidence: dict | None = None
 
 
 class ConversationDetailOut(BaseModel):
@@ -430,6 +466,9 @@ class ConversationDetailOut(BaseModel):
     active_scope: ActiveScopeInfo
     company_kb_enabled: bool = True
     google_drive_enabled: bool = False
+    parent_ids: list[str] = Field(default_factory=list)
+    branched_from: list[dict] = Field(default_factory=list)
+    enabled_models: list[dict] | None = None
     messages: list[ConversationMessageOut] = Field(default_factory=list)
 
 
