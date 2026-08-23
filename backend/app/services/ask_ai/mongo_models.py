@@ -1,9 +1,10 @@
 """MongoDB document models for Ask AI conversation persistence.
 
-Three collections:
+Four collections:
   ask_ai_users              — one doc per Postgres user, links user identity
   ask_ai_conversations      — conversation metadata + active scope
   ask_ai_conversation_history — per-turn message history
+  ask_ai_turn_runs          — one doc per model run per turn (candidates grid)
 """
 
 from __future__ import annotations
@@ -108,6 +109,41 @@ class SourcesUsed(BaseModel):
     google_drive: bool = False
 
 
+class RunMetrics(BaseModel):
+    """Server-side metrics for one model run (card footer)."""
+
+    tokens_in: int = 0
+    tokens_out: int = 0
+    tokens_estimated: bool = True
+    cost_usd: float = 0.0
+    latency_ms: int = 0
+
+
+class MongoTurnRun(BaseModel):
+    """One record per model run per turn in ask_ai_turn_runs collection.
+
+    Every candidate answer of the comparison grid is persisted, whether or
+    not it is later selected. ``turn_message_id`` is the _id of the user
+    message that started the turn.
+    """
+
+    id: str = Field(alias="_id")
+    conversation_id: str
+    turn_message_id: str
+    user_id: int
+    provider: str
+    model_id: str
+    display_version: str = ""
+    body: str = ""
+    status: Literal["ok", "error"] = "ok"
+    metrics: RunMetrics = Field(default_factory=RunMetrics)
+    selected: bool = False
+    created_at: datetime = Field(default_factory=_now)
+
+    class Config:
+        populate_by_name = True
+
+
 class MongoHistoryMessage(BaseModel):
     """One record per conversation turn in ask_ai_conversation_history collection.
 
@@ -119,6 +155,10 @@ class MongoHistoryMessage(BaseModel):
     user_id: int
     role: Literal["user", "assistant"]
     content: str
+    # Model attribution + metrics for selected assistant answers (v2)
+    provider: str | None = None
+    model_id: str | None = None
+    metrics: RunMetrics | None = None
     # Snapshot of active_scope at the time this message was sent/received
     scope_snapshot: ActiveScope = Field(default_factory=ActiveScope)
     sources_used: SourcesUsed = Field(default_factory=SourcesUsed)

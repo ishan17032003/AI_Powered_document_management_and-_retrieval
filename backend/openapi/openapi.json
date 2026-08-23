@@ -166,6 +166,26 @@
         "title": "AccessRuleOut",
         "type": "object"
       },
+      "ActiveScopeInfo": {
+        "properties": {
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ScopedClassInfo"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ScopedDocumentInfo"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "title": "ActiveScopeInfo",
+        "type": "object"
+      },
       "AdminCredentialReset": {
         "additionalProperties": false,
         "properties": {
@@ -264,9 +284,188 @@
         "title": "AdminUserPatch",
         "type": "object"
       },
+      "AllDocRuleOut": {
+        "description": "Flat projection of a DOC-scoped access rule with user identity.\n\nUsed by the admin access-control matrix view to display every\nuser → document rule in one table.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "integer"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "user_name": {
+            "title": "User Name",
+            "type": "string"
+          },
+          "user_username": {
+            "title": "User Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "user_id",
+          "user_name",
+          "user_username",
+          "doc_id",
+          "doc_title",
+          "doc_class",
+          "effect",
+          "permission",
+          "reason",
+          "is_active",
+          "created_at"
+        ],
+        "title": "AllDocRuleOut",
+        "type": "object"
+      },
+      "AllGroupDocRuleOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "integer"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_id",
+          "group_id",
+          "group_name",
+          "doc_id",
+          "doc_title",
+          "doc_class",
+          "effect",
+          "permission",
+          "reason",
+          "is_active",
+          "created_at"
+        ],
+        "title": "AllGroupDocRuleOut",
+        "type": "object"
+      },
       "AskQuery": {
         "additionalProperties": false,
         "properties": {
+          "company_kb_enabled": {
+            "default": true,
+            "title": "Company Kb Enabled",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "document_id": {
             "anyOf": [
               {
@@ -279,6 +478,41 @@
             ],
             "title": "Document Id"
           },
+          "google_drive_enabled": {
+            "default": false,
+            "title": "Google Drive Enabled",
+            "type": "boolean"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatMessage"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          },
+          "models": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelSelection"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models"
+          },
           "question": {
             "maxLength": 4000,
             "minLength": 1,
@@ -290,70 +524,6 @@
           "question"
         ],
         "title": "AskQuery",
-        "type": "object"
-      },
-      "AskResponse": {
-        "properties": {
-          "answer": {
-            "title": "Answer",
-            "type": "string"
-          },
-          "candidates": {
-            "items": {
-              "$ref": "#/components/schemas/Candidate"
-            },
-            "title": "Candidates",
-            "type": "array"
-          },
-          "citations": {
-            "items": {
-              "$ref": "#/components/schemas/Citation"
-            },
-            "title": "Citations",
-            "type": "array"
-          },
-          "mode": {
-            "title": "Mode",
-            "type": "string"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "needs_clarification": {
-            "default": false,
-            "title": "Needs Clarification",
-            "type": "boolean"
-          },
-          "question": {
-            "title": "Question",
-            "type": "string"
-          },
-          "scoped_document_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scoped Document Id"
-          }
-        },
-        "required": [
-          "question",
-          "answer",
-          "mode"
-        ],
-        "title": "AskResponse",
         "type": "object"
       },
       "AuditOut": {
@@ -547,33 +717,94 @@
         "title": "Body_visual_image_search_api_v1_search_visual_image_post",
         "type": "object"
       },
-      "Candidate": {
+      "ChatMessage": {
         "properties": {
-          "document_id": {
-            "title": "Document Id",
-            "type": "integer"
+          "content": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
           },
-          "title": {
-            "title": "Title",
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
             "type": "string"
           }
         },
         "required": [
-          "document_id",
-          "title"
+          "role",
+          "content"
         ],
-        "title": "Candidate",
+        "title": "ChatMessage",
         "type": "object"
       },
-      "Citation": {
+      "ConversationCreateIn": {
+        "additionalProperties": false,
         "properties": {
-          "document_id": {
-            "title": "Document Id",
-            "type": "integer"
+          "company_kb_enabled": {
+            "default": true,
+            "title": "Company Kb Enabled",
+            "type": "boolean"
           },
-          "index": {
-            "title": "Index",
-            "type": "integer"
+          "google_drive_enabled": {
+            "default": false,
+            "title": "Google Drive Enabled",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ConversationCreateIn",
+        "type": "object"
+      },
+      "ConversationDetailOut": {
+        "properties": {
+          "active_scope": {
+            "$ref": "#/components/schemas/ActiveScopeInfo"
+          },
+          "company_kb_enabled": {
+            "default": true,
+            "title": "Company Kb Enabled",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "google_drive_enabled": {
+            "default": false,
+            "title": "Google Drive Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "format": "date-time",
+            "title": "Last Message At",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
           },
           "title": {
             "title": "Title",
@@ -581,11 +812,130 @@
           }
         },
         "required": [
-          "index",
-          "document_id",
-          "title"
+          "id",
+          "title",
+          "created_at",
+          "last_message_at",
+          "active_scope"
         ],
-        "title": "Citation",
+        "title": "ConversationDetailOut",
+        "type": "object"
+      },
+      "ConversationMessageOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "sources_used": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources Used"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ConversationMessageOut",
+        "type": "object"
+      },
+      "ConversationOut": {
+        "properties": {
+          "company_kb_enabled": {
+            "default": true,
+            "title": "Company Kb Enabled",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "google_drive_enabled": {
+            "default": false,
+            "title": "Google Drive Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "format": "date-time",
+            "title": "Last Message At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "last_message_at"
+        ],
+        "title": "ConversationOut",
+        "type": "object"
+      },
+      "DocClassOut": {
+        "description": "Public projection of a DocClass taxonomy entry.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DocClassOut",
         "type": "object"
       },
       "DocumentDetail": {
@@ -1673,6 +2023,35 @@
         "title": "MetadataUpdate",
         "type": "object"
       },
+      "ModelSelection": {
+        "additionalProperties": false,
+        "description": "One requested model run: provider key + optional version id.",
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "provider": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ModelSelection",
+        "type": "object"
+      },
       "MoveDocument": {
         "additionalProperties": false,
         "properties": {
@@ -1717,6 +2096,39 @@
         "title": "OkfEntryCreate",
         "type": "object"
       },
+      "ReclassifyDocument": {
+        "additionalProperties": false,
+        "description": "Super Admin body for manually changing a document's class.\n\nEither ``class_id`` (existing class) **or** ``class_name`` (new or\nexisting name, looked up / created on the fly) may be supplied.\nSupplying neither clears the class (sets to Uncategorized).",
+        "properties": {
+          "class_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          }
+        },
+        "title": "ReclassifyDocument",
+        "type": "object"
+      },
       "ResolveDup": {
         "additionalProperties": false,
         "properties": {
@@ -1739,6 +2151,67 @@
           "primary_document_id"
         ],
         "title": "ResolveDup",
+        "type": "object"
+      },
+      "RoleGroupMap": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_name",
+          "group_id"
+        ],
+        "title": "RoleGroupMap",
+        "type": "object"
+      },
+      "ScopedClassInfo": {
+        "properties": {
+          "class_id": {
+            "title": "Class Id",
+            "type": "integer"
+          },
+          "class_name": {
+            "title": "Class Name",
+            "type": "string"
+          },
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "class_id",
+          "class_name"
+        ],
+        "title": "ScopedClassInfo",
+        "type": "object"
+      },
+      "ScopedDocumentInfo": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title"
+        ],
+        "title": "ScopedDocumentInfo",
         "type": "object"
       },
       "SearchHit": {
@@ -1837,6 +2310,52 @@
           "hits"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "SelectAnswerQuery": {
+        "properties": {
+          "chosen_answer": {
+            "title": "Chosen Answer",
+            "type": "string"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "chosen_answer",
+          "provider"
+        ],
+        "title": "SelectAnswerQuery",
         "type": "object"
       },
       "SemanticQuery": {
@@ -2001,6 +2520,75 @@
           "status"
         ],
         "title": "UserAdminOut",
+        "type": "object"
+      },
+      "UserDocRuleOut": {
+        "description": "One access_rule row surfaced from a user's perspective.\n\nIncludes revoked (is_active=False) rules so Super Admin can see\nthe full history. All permissions (VIEW, DOWNLOAD, …) are included.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Class"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "integer"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_id",
+          "doc_id",
+          "doc_title",
+          "doc_class",
+          "effect",
+          "permission",
+          "reason",
+          "is_active",
+          "created_at"
+        ],
+        "title": "UserDocRuleOut",
         "type": "object"
       },
       "UserOut": {
@@ -2367,6 +2955,35 @@
         ],
         "title": "VisualSearchResponse",
         "type": "object"
+      },
+      "VllmUrlOut": {
+        "description": "Response containing the updated vLLM URL.",
+        "properties": {
+          "vllm_url": {
+            "title": "Vllm Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vllm_url"
+        ],
+        "title": "VllmUrlOut",
+        "type": "object"
+      },
+      "VllmUrlUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update the vLLM URL dynamically.",
+        "properties": {
+          "vllm_url": {
+            "title": "Vllm Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vllm_url"
+        ],
+        "title": "VllmUrlUpdate",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -2388,6 +3005,67 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/access/all-doc-rules": {
+      "get": {
+        "description": "Return every DOC-scoped access_rule for every user, including history.\n\nSorted by user name then document title.  Requires ADMIN permission.",
+        "operationId": "list_all_doc_rules_api_v1_access_all_doc_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AllDocRuleOut"
+                  },
+                  "title": "Response List All Doc Rules Api V1 Access All Doc Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List every DOC-scoped access rule across all users",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/v1/access/all-group-doc-rules": {
+      "get": {
+        "operationId": "list_all_group_doc_rules_api_v1_access_all_group_doc_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AllGroupDocRuleOut"
+                  },
+                  "title": "Response List All Group Doc Rules Api V1 Access All Group Doc Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List every DOC-scoped access rule for groups",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/api/v1/access/effective": {
       "get": {
         "operationId": "explain_effective_access_api_v1_access_effective_get",
@@ -2576,6 +3254,59 @@
         ]
       }
     },
+    "/api/v1/access/user/{user_id}/doc-rules": {
+      "get": {
+        "description": "Return every DOC-scoped access_rule for the given user.\n\nIncludes both active and revoked (is_active=False) rules so admins\ncan see the full history.  All permissions (VIEW, DOWNLOAD, …) are\nreturned.  Requires at least the ADMIN global permission.",
+        "operationId": "list_user_doc_rules_api_v1_access_user__user_id__doc_rules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserDocRuleOut"
+                  },
+                  "title": "Response List User Doc Rules Api V1 Access User  User Id  Doc Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List all DOC-scoped access rules for a user (incl. revoke history)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/api/v1/access/{scope}/rules": {
       "post": {
         "operationId": "grant_global_access_rule_api_v1_access__scope__rules_post",
@@ -2756,6 +3487,96 @@
         "summary": "Grant Access Rule",
         "tags": [
           "access"
+        ]
+      }
+    },
+    "/api/v1/admin/doc-classes": {
+      "get": {
+        "description": "Return all document taxonomy classes sorted by name.\n\nUsed by the Super Admin class-selector dropdown in the Repository view.",
+        "operationId": "list_doc_classes_api_v1_admin_doc_classes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocClassOut"
+                  },
+                  "title": "Response List Doc Classes Api V1 Admin Doc Classes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Doc Classes",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/documents/{doc_id}/class": {
+      "patch": {
+        "description": "Manually reassign the document class (Super Admin only).\n\nAccepts either an existing ``class_id`` or a free-text ``class_name``\n(which is created on the fly if it does not yet exist).  When the MinIO\nstorage backend is active the binary is moved to the new class bucket.",
+        "operationId": "reclassify_document_api_v1_admin_documents__doc_id__class_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReclassifyDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reclassify Document",
+        "tags": [
+          "admin"
         ]
       }
     },
@@ -3009,6 +3830,83 @@
           }
         ],
         "summary": "Release Metrics",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/role-groups": {
+      "get": {
+        "operationId": "get_role_groups_api_v1_admin_role_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoleGroupMap"
+                  },
+                  "title": "Response Get Role Groups Api V1 Admin Role Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Role Groups",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/vllm-url": {
+      "put": {
+        "description": "Update the active vLLM URL dynamically and persist it to .env.",
+        "operationId": "update_vllm_url_api_v1_admin_settings_vllm_url_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VllmUrlUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VllmUrlOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Vllm Url",
         "tags": [
           "admin"
         ]
@@ -3623,6 +4521,163 @@
         ]
       }
     },
+    "/api/v1/auth/google/callback": {
+      "get": {
+        "description": "Handle the OAuth callback from Google.\n\nExchanges the authorization code for tokens, fetches the user's email,\nand stores the connection in MongoDB.  The popup then closes itself.",
+        "operationId": "google_drive_callback_api_v1_auth_google_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Drive Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/google/connect": {
+      "get": {
+        "description": "Return the Google OAuth authorization URL for Drive access.\n\nThe frontend opens this URL in a popup window to start the OAuth flow.",
+        "operationId": "google_drive_connect_api_v1_auth_google_connect_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Google Drive Connect",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/google/disconnect": {
+      "post": {
+        "description": "Remove the Google Drive connection for the current user.",
+        "operationId": "google_drive_disconnect_api_v1_auth_google_disconnect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Google Drive Disconnect",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/google/status": {
+      "get": {
+        "description": "Return the Google Drive connection status for the current user.",
+        "operationId": "google_drive_status_api_v1_auth_google_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Google Drive Status",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login_api_v1_auth_login_post",
@@ -3937,6 +4992,79 @@
         ]
       }
     },
+    "/api/v1/documents/trash": {
+      "get": {
+        "operationId": "list_trash_documents_api_v1_documents_trash_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  },
+                  "title": "Response List Trash Documents Api V1 Documents Trash Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Trash Documents",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/trash/empty": {
+      "delete": {
+        "operationId": "empty_trash_api_v1_documents_trash_empty_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Empty Trash",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/api/v1/documents/{doc_id}": {
       "delete": {
         "operationId": "delete_document_api_v1_documents__doc_id__delete",
@@ -4181,6 +5309,95 @@
           }
         ],
         "summary": "Move Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/purge": {
+      "delete": {
+        "operationId": "purge_document_api_v1_documents__doc_id__purge_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Purge Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{doc_id}/restore": {
+      "post": {
+        "operationId": "restore_document_api_v1_documents__doc_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Doc Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Restore Document",
         "tags": [
           "documents"
         ]
@@ -4820,7 +6037,7 @@
     },
     "/api/v1/search/ask": {
       "post": {
-        "description": "Ask a natural-language question; get a grounded answer with citations (RAG).\n\nRetrieval is security-trimmed to what the user may VIEW, so the AI answer\nnever draws on documents the user cannot access.",
+        "description": "Ask a natural-language question; get a grounded answer with citations (RAG).\n\nRetrieval is security-trimmed to what the user may VIEW, so the AI answer\nnever draws on documents the user cannot access. Returns an SSE stream for multiple models.",
         "operationId": "ask_api_v1_search_ask_post",
         "requestBody": {
           "content": {
@@ -4836,9 +6053,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -4860,6 +6075,297 @@
           }
         ],
         "summary": "Ask",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/ask/models": {
+      "get": {
+        "description": "The Ask AI model registry: configured providers, versions, capabilities, pricing.",
+        "operationId": "ask_models_api_v1_search_ask_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Ask Models",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/ask/select": {
+      "post": {
+        "description": "Save the chosen parallel LLM answer.",
+        "operationId": "ask_select_api_v1_search_ask_select_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectAnswerQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Ask Select",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/conversations": {
+      "get": {
+        "description": "List recent Ask AI conversations for the current user.",
+        "operationId": "list_conversations_api_v1_search_conversations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationOut"
+                  },
+                  "title": "Response List Conversations Api V1 Search Conversations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Conversations",
+        "tags": [
+          "search"
+        ]
+      },
+      "post": {
+        "description": "Create a new Ask AI conversation session.",
+        "operationId": "create_conversation_api_v1_search_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ConversationCreateIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Conversation",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/conversations/{conversation_id}": {
+      "delete": {
+        "description": "Delete a conversation and its messages.",
+        "operationId": "delete_conversation_api_v1_search_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Conversation",
+        "tags": [
+          "search"
+        ]
+      },
+      "get": {
+        "description": "Get conversation details including active scope and message history.",
+        "operationId": "get_conversation_api_v1_search_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Conversation",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search/conversations/{conversation_id}/scope": {
+      "delete": {
+        "description": "Clear active document and class filters for a conversation.",
+        "operationId": "clear_conversation_scope_api_v1_search_conversations__conversation_id__scope_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear Conversation Scope",
         "tags": [
           "search"
         ]

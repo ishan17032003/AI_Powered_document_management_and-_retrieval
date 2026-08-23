@@ -91,19 +91,9 @@ def seed_demo_database(
         permissions = bootstrap_catalog_service.ensure_permissions(db)
         roles = bootstrap_catalog_service.ensure_roles(db, permissions)
         
-        # Ensure groups for roles exist
-        for role_name in roles:
-            group = db.query(models.Group).filter(models.Group.name == role_name).first()
-            if not group:
-                group = models.Group(
-                    name=role_name,
-                    description=f"Group for {role_name} role",
-                    is_active=True,
-                    created_by=1
-                )
-                db.add(group)
-        db.flush()
-
+        # Users must exist before groups: groups.created_by is a NOT NULL FK
+        # to users.id, which PostgreSQL enforces (SQLite silently did not).
+        users_by_name: dict[str, models.User] = {}
         for identity in DEMO_IDENTITIES:
             user = (
                 db.query(models.User)
@@ -130,6 +120,24 @@ def seed_demo_database(
                 )
             elif settings.demo_fixed_credentials and password_factory is None:
                 user.password_hash = hash_password(FIXED_DEMO_PASSWORDS[identity.username])
+            users_by_name[identity.username] = user
+
+        owner = users_by_name.get("admin") or next(iter(users_by_name.values()))
+        for role_name in roles:
+            group = db.query(models.Group).filter(models.Group.name == role_name).first()
+            if not group:
+                db.add(
+                    models.Group(
+                        name=role_name,
+                        description=f"Group for {role_name} role",
+                        is_active=True,
+                        created_by=owner.id,
+                    )
+                )
+        db.flush()
+
+        for identity in DEMO_IDENTITIES:
+            user = users_by_name[identity.username]
             role = roles.get(identity.role_name)
             if role is not None:
                 assignment = (

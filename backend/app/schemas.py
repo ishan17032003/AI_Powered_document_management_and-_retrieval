@@ -318,8 +318,17 @@ class ChatMessage(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class ModelSelection(RequestModel):
+    """One requested model run: provider key + optional version id."""
+
+    provider: str = Field(min_length=1, max_length=32)
+    model_id: str | None = Field(default=None, max_length=128)
+
+
 class AskQuery(RequestModel):
     question: str = Field(min_length=1, max_length=4000)
+    # Per-run model selection; None = every configured provider at default version
+    models: list[ModelSelection] | None = Field(default=None, max_length=8)
     document_id: int | None = Field(default=None, gt=0)
     history: list[ChatMessage] | None = Field(default=None, max_length=20)
     # Conversational session management

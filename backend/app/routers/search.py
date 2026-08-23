@@ -244,15 +244,27 @@ async def ask(
         conversation_id=payload.conversation_id,
         company_kb_enabled=payload.company_kb_enabled,
         google_drive_enabled=payload.google_drive_enabled,
+        model_selections=payload.models,
         context=get_request_context(request),
     )
     return StreamingResponse(stream_gen, media_type="text/event-stream")
+
+
+@router.get("/ask/models")
+def ask_models(user: models.User = Depends(require("VIEW"))):
+    """The Ask AI model registry: configured providers, versions, capabilities, pricing."""
+    from ..services.ask_ai import model_registry
+    from ..services.ask_ai.multi_llm import get_configured_providers
+
+    return {"providers": model_registry.to_public(model_registry.available_providers(get_configured_providers()))}
 
 
 class SelectAnswerQuery(BaseModel):
     conversation_id: str
     chosen_answer: str
     provider: str
+    model_id: str | None = None
+    metrics: dict | None = None
 
 @router.post("/ask/select")
 async def ask_select(
@@ -266,6 +278,8 @@ async def ask_select(
         user=user,
         chosen_answer=payload.chosen_answer,
         provider=payload.provider,
+        model_id=payload.model_id,
+        metrics=payload.metrics,
     )
 
 

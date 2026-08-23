@@ -16,7 +16,9 @@ from ..services.ask_ai.mongo_models import (
     ActiveScope,
     MongoConversation,
     MongoHistoryMessage,
+    MongoTurnRun,
     MongoUser,
+    RunMetrics,
     SourcesUsed,
 )
 
@@ -26,6 +28,7 @@ _log = logging.getLogger(__name__)
 _USERS = "ask_ai_users"
 _CONVERSATIONS = "ask_ai_conversations"
 _HISTORY = "ask_ai_conversation_history"
+_TURN_RUNS = "ask_ai_turn_runs"
 
 
 def _now() -> datetime:
@@ -246,6 +249,9 @@ async def append_message(
     content: str,
     scope_snapshot: ActiveScope,
     sources_used: SourcesUsed,
+    provider: str | None = None,
+    model_id: str | None = None,
+    metrics: RunMetrics | None = None,
 ) -> str | None:
     """Append one message to the conversation history and return its _id."""
     if db is None:
@@ -260,6 +266,9 @@ async def append_message(
             content=content,
             scope_snapshot=scope_snapshot,
             sources_used=sources_used,
+            provider=provider,
+            model_id=model_id,
+            metrics=metrics,
         )
         await db[_HISTORY].insert_one(doc.model_dump(by_alias=True))
         return message_id
@@ -316,3 +325,74 @@ async def delete_conversation(db, conversation_id: str, user_id: int) -> bool:
         _log.warning("delete_conversation failed: %s", exc)
         return False
 
+
+
+# ── Turn runs (multi-model comparison grid) ───────────────────────────────────
+
+
+async def append_turn_runs(
+    db,
+    conversation_id: str,
+    user_id: int,
+    turn_message_id: str,
+    runs: list[dict],
+) -> list[str]:
+    """Persist every candidate model run of one turn. Returns inserted ids."""
+    if db is None or not runs:
+        return []
+    try:
+        docs = []
+        for run in runs:
+            doc = MongoTurnRun(
+                **{"_id": _uid()},
+                conversation_id=conversation_id,
+                turn_message_id=turn_message_id,
+                user_id=user_id,
+                provider=str(run.get("provider", "")),
+                model_id=str(run.get("model_id", "")),
+                display_version=str(run.get("display_version", "")),
+                body=str(run.get("body", "")),
+                status="error" if run.get("status") == "error" else "ok",
+                metrics=RunMetrics(**(run.get("metrics") or {})),
+            )
+            docs.append(doc.model_dump(by_alias=True))
+        await db[_TURN_RUNS].insert_many(docs)
+        return [d["_id"] for d in docs]
+    except Exception as exc:
+        _log.warning("append_turn_runs failed: %s", exc)
+        return []
+
+
+async def mark_run_selected(
+    db,
+    conversation_id: str,
+    user_id: int,
+    provider: str,
+    turn_message_id: str | None = None,
+) -> None:
+    """Flag the selected candidate run for a turn (latest turn when id omitted)."""
+    if db is None:
+        return
+    try:
+        query: dict = {"conversation_id": conversation_id, "user_id": user_id, "provider": provider}
+        if turn_message_id:
+            query["turn_message_id"] = turn_message_id
+        run = await db[_TURN_RUNS].find_one(query, sort=[("created_at", -1)])
+        if run:
+            await db[_TURN_RUNS].update_one({"_id": run["_id"]}, {"$set": {"selected": True}})
+    except Exception as exc:
+        _log.warning("mark_run_selected failed: %s", exc)
+
+
+async def list_turn_runs(db, conversation_id: str, user_id: int) -> list[dict]:
+    """All persisted candidate runs for a conversation (comparison log)."""
+    if db is None:
+        return []
+    try:
+        cursor = db[_TURN_RUNS].find(
+            {"conversation_id": conversation_id, "user_id": user_id}
+        ).sort("created_at", 1)
+        return [run async for run in cursor]
+    except Exception as exc:
+        _log.warning("list_turn_runs failed: %s", exc)
+        return []

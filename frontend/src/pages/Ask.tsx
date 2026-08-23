@@ -28,6 +28,8 @@ import {
   DocSummary,
   GoogleDriveStatus,
   VisualSearchHit,
+  AskProviderInfo,
+  AskRunMetrics,
 } from "../api";
 import { PageHeader, StatusPill } from "../components/ui";
 
@@ -38,6 +40,7 @@ interface Turn {
   error?: string;
   pending?: boolean;
   providerChunks?: Record<string, string>;
+  runMeta?: Record<string, { model_id: string; display_version: string; status?: string; metrics?: AskRunMetrics }>;
   chosenProvider?: string;
 }
 
@@ -100,9 +103,33 @@ export default function Ask() {
   const [activeScope, setActiveScope] = useState<ActiveScopeInfo>({ documents: [], classes: [] });
 
   // Source selection states: by default Company KB is enabled; at least one must be selected
+  const [modelRegistry, setModelRegistry] = useState<AskProviderInfo[]>([]);
+  const [providerEnabled, setProviderEnabled] = useState<Record<string, boolean>>({});
+  const [modelChoice, setModelChoice] = useState<Record<string, string>>({});
   const [companyKbEnabled, setCompanyKbEnabled] = useState(true);
   const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
   const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false, email: null });
+
+  useEffect(() => {
+    api.getAskModels().then((r) => {
+      setModelRegistry(r.providers);
+      setProviderEnabled((cur) => {
+        const next = { ...cur };
+        r.providers.forEach((p) => { if (next[p.provider] === undefined) next[p.provider] = true; });
+        return next;
+      });
+      setModelChoice((cur) => {
+        const next = { ...cur };
+        r.providers.forEach((p) => {
+          if (!next[p.provider]) {
+            const def = p.versions.find((v) => v.default) ?? p.versions[0];
+            if (def) next[p.provider] = def.model_id;
+          }
+        });
+        return next;
+      });
+    }).catch(() => {});
+  }, []);
 
   // Available documents and classes for @ mentions
   const [availableDocs, setAvailableDocs] = useState<DocSummary[]>([]);
@@ -362,13 +389,19 @@ export default function Ask() {
     setTurns((current) => [...current, { id, question: normalized, pending: true, providerChunks: {} }]);
 
     try {
+      const modelsPayload = modelRegistry.length > 0
+        ? modelRegistry
+            .filter((p) => providerEnabled[p.provider] !== false)
+            .map((p) => ({ provider: p.provider, model_id: modelChoice[p.provider] ?? null }))
+        : null;
       const res = await api.askStream(
         normalized,
         null,
         historyPayload.length > 0 ? historyPayload : undefined,
         activeConvId,
         companyKbEnabled,
-        googleDriveEnabled
+        googleDriveEnabled,
+        modelsPayload
       );
       
       const reader = res.body?.getReader();
@@ -377,6 +410,7 @@ export default function Ask() {
       const decoder = new TextDecoder();
       let responseMeta: any = null;
       let chunks: Record<string, string> = {};
+      let runMeta: Turn["runMeta"] = {};
 
       let buffer = "";
       let isDone = false;
@@ -414,6 +448,25 @@ export default function Ask() {
                       providerChunks: { ...chunks },
                       response: { ...data, answer: "" }
                     } : turn
+                  )
+                );
+              } else if (data.type === "run_started" && data.provider) {
+                runMeta![data.provider] = { model_id: data.model_id || "", display_version: data.display_version || "" };
+                if (chunks[data.provider] === undefined) chunks[data.provider] = "";
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === id ? { ...turn, providerChunks: { ...chunks }, runMeta: { ...runMeta } } : turn
+                  )
+                );
+              } else if (data.type === "run_completed" && data.provider) {
+                runMeta![data.provider] = {
+                  ...(runMeta![data.provider] || { model_id: data.model_id || "", display_version: "" }),
+                  status: data.status,
+                  metrics: data.metrics,
+                };
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === id ? { ...turn, runMeta: { ...runMeta } } : turn
                   )
                 );
               } else if (data.chunk !== undefined && data.provider) {
@@ -836,7 +889,14 @@ export default function Ask() {
                                             paddingBottom: "0.4rem",
                                           }}
                                         >
-                                          <span>{provider}</span>
+                                          <span>
+                                            {provider}
+                                            {turn.runMeta?.[provider]?.display_version && (
+                                              <span style={{ marginLeft: "0.45rem", fontSize: "0.7rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 500 }}>
+                                                {turn.runMeta[provider].display_version}
+                                              </span>
+                                            )}
+                                          </span>
                                           {turn.pending && (
                                             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "normal" }}>
                                               Streaming...
@@ -850,6 +910,15 @@ export default function Ask() {
                                             <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Waiting for response...</span>
                                           )}
                                         </div>
+                                        {turn.runMeta?.[provider]?.metrics && (
+                                          <div style={{ marginTop: "0.7rem", paddingTop: "0.5rem", borderTop: "1px dashed var(--line)", display: "flex", gap: "0.6rem", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)" }}>
+                                            <span>{(turn.runMeta[provider].metrics!.tokens_in + turn.runMeta[provider].metrics!.tokens_out).toLocaleString()} tok{turn.runMeta[provider].metrics!.tokens_estimated ? "~" : ""}</span>
+                                            <span>·</span>
+                                            <span>${turn.runMeta[provider].metrics!.cost_usd.toFixed(4)}</span>
+                                            <span>·</span>
+                                            <span>{(turn.runMeta[provider].metrics!.latency_ms / 1000).toFixed(1)}s</span>
+                                          </div>
+                                        )}
                                         {!turn.pending && chunk && provider !== "Notice" && (
                                           <button
                                             type="button"
@@ -858,7 +927,11 @@ export default function Ask() {
                                             onClick={async () => {
                                               if (!turn.response?.conversation_id) return;
                                               try {
-                                                await api.selectAnswer(turn.response.conversation_id, chunk, provider);
+                                                await api.selectAnswer(
+                                                  turn.response.conversation_id, chunk, provider,
+                                                  turn.runMeta?.[provider]?.model_id ?? null,
+                                                  turn.runMeta?.[provider]?.metrics ?? null
+                                                );
                                                 setTurns((current) =>
                                                   current.map((t) =>
                                                     t.id === turn.id
@@ -941,6 +1014,46 @@ export default function Ask() {
               </div>
             )}
           </div>
+
+          {/* Models bar: enable/disable providers and pick versions for the next question */}
+          {modelRegistry.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", padding: "0.45rem 0.15rem" }}>
+              <span style={{ fontSize: "0.68rem", fontFamily: "IBM Plex Mono, monospace", letterSpacing: "0.12em", color: "var(--text-muted)" }}>MODELS</span>
+              {modelRegistry.map((p) => {
+                const enabled = providerEnabled[p.provider] !== false;
+                return (
+                  <div
+                    key={p.provider}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "0.4rem",
+                      border: `1px solid ${enabled ? p.color : "var(--line)"}`,
+                      borderRadius: "999px", padding: "0.18rem 0.55rem",
+                      opacity: enabled ? 1 : 0.55, background: "var(--surface-50)",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setProviderEnabled((cur) => ({ ...cur, [p.provider]: !enabled }))}
+                      title={enabled ? `Disable ${p.display_name}` : `Enable ${p.display_name}`}
+                      style={{ border: "none", background: "none", cursor: "pointer", fontWeight: 600, fontSize: "0.78rem", color: enabled ? p.color : "var(--text-muted)", padding: 0 }}
+                    >
+                      {p.display_name}
+                    </button>
+                    <select
+                      value={modelChoice[p.provider] ?? ""}
+                      disabled={!enabled || p.versions.length < 2}
+                      onChange={(e) => setModelChoice((cur) => ({ ...cur, [p.provider]: e.target.value }))}
+                      style={{ border: "none", background: "transparent", fontSize: "0.72rem", fontFamily: "IBM Plex Mono, monospace", color: "var(--text-muted)", cursor: "pointer", maxWidth: "9.5rem" }}
+                    >
+                      {p.versions.map((v) => (
+                        <option key={v.model_id} value={v.model_id}>{v.display_version}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Scope Bar & Source Selector Toolbar above the Composer */}
           <div className="ask-scope-toolbar">

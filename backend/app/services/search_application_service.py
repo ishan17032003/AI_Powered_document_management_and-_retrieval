@@ -671,6 +671,7 @@ async def ask_stream(
     conversation_id: str | None = None,
     company_kb_enabled: bool = True,
     google_drive_enabled: bool = False,
+    model_selections: list[schemas.ModelSelection] | None = None,
     context: RequestContext | None = None,
 ):
     import json
@@ -763,6 +764,7 @@ async def ask_stream(
         google_drive=bool(google_drive_enabled and drive_files),
     )
 
+    user_msg_id: str | None = None
     if conversation_id and mongo_db is not None:
         user_msg_id = await ask_ai_repository.append_message(
             mongo_db, conversation_id, user.id, role="user", content=normalized, scope_snapshot=active_scope, sources_used=sources_used
@@ -780,9 +782,17 @@ async def ask_stream(
     images_payload = [img.model_dump() if hasattr(img, "model_dump") else dict(img) for img in images]
 
     from .ask_ai.multi_llm import synthesize_parallel_stream, get_configured_providers
+    from .ask_ai import model_registry
     configured_providers = get_configured_providers()
+    if model_selections is not None:
+        selections = {m.provider: m.model_id for m in model_selections if m.provider in configured_providers}
+        if not selections:
+            selections = {p: None for p in configured_providers}
+    else:
+        selections = {p: None for p in configured_providers}
+    registry_public = model_registry.to_public(model_registry.available_providers(configured_providers))
 
-    yield f'data: {json.dumps({"type": "meta", "conversation_id": conversation_id, "active_scope": _to_active_scope_info(active_scope), "citations": citations, "drive_sources": drive_sources, "images": images_payload, "providers": configured_providers}, default=str)}\n\n'
+    yield f'data: {json.dumps({"type": "meta", "conversation_id": conversation_id, "active_scope": _to_active_scope_info(active_scope), "citations": citations, "drive_sources": drive_sources, "images": images_payload, "providers": configured_providers, "models": registry_public}, default=str)}\n\n'
 
     # Build prompt for providers
     system_prompt = "You are DocVault AI. Answer based on the provided context.\n"
@@ -794,8 +804,35 @@ async def ask_stream(
     
     provider_messages = [{"role": "system", "content": system_prompt}] + rag_history + [{"role": "user", "content": clean_query}]
 
-    async for chunk in synthesize_parallel_stream(provider_messages):
+    # Accumulate every model run so the full comparison grid is persisted in
+    # Mongo (ask_ai_turn_runs), not just the answer the user later selects.
+    run_acc: dict[str, dict] = {}
+    async for chunk in synthesize_parallel_stream(provider_messages, selections):
+        try:
+            event = json.loads(chunk[6:]) if chunk.startswith("data: ") else None
+        except (json.JSONDecodeError, TypeError):
+            event = None
+        if event:
+            etype = event.get("type")
+            provider = event.get("provider")
+            if etype == "run_started" and provider:
+                run_acc[provider] = {
+                    "provider": provider,
+                    "model_id": event.get("model_id", ""),
+                    "display_version": event.get("display_version", ""),
+                    "body": "",
+                }
+            elif etype == "chunk" and provider in run_acc:
+                run_acc[provider]["body"] += event.get("chunk", "")
+            elif etype == "run_completed" and provider in run_acc:
+                run_acc[provider]["status"] = event.get("status", "ok")
+                run_acc[provider]["metrics"] = event.get("metrics") or {}
         yield chunk
+
+    if conversation_id and mongo_db is not None and run_acc:
+        await ask_ai_repository.append_turn_runs(
+            mongo_db, conversation_id, user.id, user_msg_id or "", list(run_acc.values())
+        )
 
 
 async def select_answer(
@@ -803,13 +840,21 @@ async def select_answer(
     user: models.User,
     chosen_answer: str,
     provider: str,
+    model_id: str | None = None,
+    metrics: dict | None = None,
 ):
+    from .ask_ai.mongo_models import RunMetrics
+
     mongo_db = get_mongo_db()
     if mongo_db is not None:
         from datetime import datetime, timezone
         sources_used = SourcesUsed(company_kb=True, google_drive=False)
         await ask_ai_repository.append_message(
-            mongo_db, conversation_id, user.id, role="assistant", content=chosen_answer, scope_snapshot=ActiveScope(), sources_used=sources_used
+            mongo_db, conversation_id, user.id, role="assistant", content=chosen_answer,
+            scope_snapshot=ActiveScope(), sources_used=sources_used,
+            provider=provider, model_id=model_id,
+            metrics=RunMetrics(**metrics) if metrics else None,
         )
+        await ask_ai_repository.mark_run_selected(mongo_db, conversation_id, user.id, provider)
         await ask_ai_repository.update_conversation_meta(mongo_db, conversation_id, user.id, last_message_at=datetime.now(timezone.utc))
     return {"status": "ok"}

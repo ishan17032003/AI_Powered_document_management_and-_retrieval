@@ -181,6 +181,29 @@ export interface DriveSourceCitation {
   snippet: string;
 }
 
+export interface AskModelVersion {
+  model_id: string;
+  display_version: string;
+  capabilities: string[];
+  pricing_per_mtok: { in: number; out: number };
+  default: boolean;
+}
+
+export interface AskProviderInfo {
+  provider: string;
+  display_name: string;
+  color: string;
+  versions: AskModelVersion[];
+}
+
+export interface AskRunMetrics {
+  tokens_in: number;
+  tokens_out: number;
+  tokens_estimated?: boolean;
+  cost_usd: number;
+  latency_ms: number;
+}
+
 export interface AskResponse {
   question: string;
   answer: string;
@@ -530,13 +553,16 @@ export const api = {
   deleteConversation: (id: string) =>
     req<{ deleted: boolean }>(`/search/conversations/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  getAskModels: () => req<{ providers: AskProviderInfo[] }>("/search/ask/models"),
+
   askStream: async (
     question: string,
     document_id?: number | null,
     history?: ChatMessage[] | null,
     conversation_id?: string | null,
     company_kb_enabled = true,
-    google_drive_enabled = false
+    google_drive_enabled = false,
+    models?: { provider: string; model_id: string | null }[] | null
   ) => {
     const headers = new Headers({ "Content-Type": "application/json" });
     const token = getToken();
@@ -551,17 +577,18 @@ export const api = {
         conversation_id: conversation_id ?? null,
         company_kb_enabled,
         google_drive_enabled,
+        models: models ?? null,
       }),
     });
     if (!res.ok) throw new ApiError(res.status, "Ask stream failed");
     return res;
   },
 
-  selectAnswer: (conversation_id: string, chosen_answer: string, provider: string) =>
+  selectAnswer: (conversation_id: string, chosen_answer: string, provider: string, model_id?: string | null, metrics?: AskRunMetrics | null) =>
     req<{ status: string }>("/search/ask/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversation_id, chosen_answer, provider }),
+      body: JSON.stringify({ conversation_id, chosen_answer, provider, model_id: model_id ?? null, metrics: metrics ?? null }),
     }),
 
   duplicates: () => req<DupGroup[]>("/duplicates"),
