@@ -30,6 +30,7 @@ class ModelVersion:
     default: bool = False
     # Reasoning levels the user may pick for this version; empty = fixed.
     reasoning_levels: tuple[str, ...] = ()
+    default_reasoning: str = "low"
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class ProviderEntry:
     display_name: str
     color: str
     versions: tuple[ModelVersion, ...] = field(default_factory=tuple)
+    default_reasoning: str = "low"
 
 
 _STATIC: tuple[ProviderEntry, ...] = (
@@ -136,6 +138,7 @@ def to_public(entries: list[ProviderEntry]) -> list[dict]:
             "provider": e.provider,
             "display_name": e.display_name,
             "color": e.color,
+            "default_reasoning": e.default_reasoning if e.provider != "vllm" else "none",
             "versions": [
                 {
                     "model_id": v.model_id,
@@ -144,6 +147,7 @@ def to_public(entries: list[ProviderEntry]) -> list[dict]:
                     "pricing_per_mtok": {"in": v.price_in_per_mtok, "out": v.price_out_per_mtok},
                     "default": v.default,
                     "reasoning_levels": list(v.reasoning_levels),
+                    "default_reasoning": v.default_reasoning if v.reasoning_levels else "none",
                 }
                 for v in e.versions
             ],

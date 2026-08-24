@@ -67,6 +67,46 @@ function AnswerText({ text }: { text: string }) {
   );
 }
 
+function RenderUserQuestion({ text }: { text: string }) {
+  const mentionRegex = /(@doc:(?:\{[^}]+\}|[^\s@,]+)|@class:(?:\{[^}]+\}|[^\s@,]+)|@drive)/gi;
+  const parts = text.split(mentionRegex);
+
+  return (
+    <span className="user-question-content">
+      {parts.map((part, idx) => {
+        if (!part) return null;
+        if (/^@doc:/i.test(part)) {
+          const docName = part.replace(/^@doc:(?:\{)?/i, "").replace(/\}?$/, "").trim();
+          return (
+            <span key={idx} className="mention-tag-pill mention-tag-doc">
+              <FileText size={12} className="mention-tag-icon" />
+              <span>{docName}</span>
+            </span>
+          );
+        }
+        if (/^@class:/i.test(part)) {
+          const className = part.replace(/^@class:(?:\{)?/i, "").replace(/\}?$/, "").trim();
+          return (
+            <span key={idx} className="mention-tag-pill mention-tag-class">
+              <Folder size={12} className="mention-tag-icon" />
+              <span>{className}</span>
+            </span>
+          );
+        }
+        if (/^@drive/i.test(part)) {
+          return (
+            <span key={idx} className="mention-tag-pill mention-tag-drive">
+              <Cloud size={12} className="mention-tag-icon" />
+              <span>Google Drive</span>
+            </span>
+          );
+        }
+        return <span key={idx}>{part}</span>;
+      })}
+    </span>
+  );
+}
+
 // Wrap plain-text markdown children so [1]-style citations keep their chip styling.
 function withCitations(children: ReactNode): ReactNode {
   return Children.map(children, (child) =>
@@ -307,6 +347,16 @@ export default function Ask() {
         });
         return next;
       });
+      setReasoningChoice((cur) => {
+        const next = { ...cur };
+        r.providers.forEach((p) => {
+          if (!next[p.provider]) {
+            const defVer = p.versions.find((v) => v.default) ?? p.versions[0];
+            next[p.provider] = defVer?.default_reasoning || p.default_reasoning || (p.provider === "vllm" ? "none" : "low");
+          }
+        });
+        return next;
+      });
     }).catch(() => {});
     api.getAskUsage().then(setAskUsage).catch(() => {});
   }, []);
@@ -424,7 +474,7 @@ export default function Ask() {
         });
         setReasoningChoice((cur) => {
           const next = { ...cur };
-          set.forEach((m, prov) => { next[prov] = m.reasoning ?? "none"; });
+          set.forEach((m, prov) => { next[prov] = m.reasoning ?? (prov === "vllm" ? "none" : "low"); });
           return next;
         });
       } else {
@@ -557,18 +607,42 @@ export default function Ask() {
     setActiveScope({ documents: [], classes: [] });
   }
 
-  function removeDocScope(docId: number) {
-    setActiveScope((prev) => ({
-      ...prev,
-      documents: prev.documents.filter((d) => d.document_id !== docId),
-    }));
+  async function removeDocScope(docId: number) {
+    const nextScope: ActiveScopeInfo = {
+      documents: (activeScope.documents || []).filter((d) => d.document_id !== docId),
+      classes: activeScope.classes || [],
+    };
+    setActiveScope(nextScope);
+    if (activeConvId) {
+      if (nextScope.documents.length === 0 && (!nextScope.classes || nextScope.classes.length === 0)) {
+        try {
+          await api.clearConversationScope(activeConvId);
+        } catch {}
+      } else {
+        try {
+          await api.updateConversationScope(activeConvId, nextScope);
+        } catch {}
+      }
+    }
   }
 
-  function removeClassScope(classId: number) {
-    setActiveScope((prev) => ({
-      ...prev,
-      classes: prev.classes.filter((c) => c.class_id !== classId),
-    }));
+  async function removeClassScope(classId: number) {
+    const nextScope: ActiveScopeInfo = {
+      documents: activeScope.documents || [],
+      classes: (activeScope.classes || []).filter((c) => c.class_id !== classId),
+    };
+    setActiveScope(nextScope);
+    if (activeConvId) {
+      if ((!nextScope.documents || nextScope.documents.length === 0) && nextScope.classes.length === 0) {
+        try {
+          await api.clearConversationScope(activeConvId);
+        } catch {}
+      } else {
+        try {
+          await api.updateConversationScope(activeConvId, nextScope);
+        } catch {}
+      }
+    }
   }
 
   // Source toggle handlers ensuring at least one is selected
@@ -699,7 +773,7 @@ export default function Ask() {
       const res = await api.askStream(
         turn.question, null, undefined, convId, companyKbEnabled, googleDriveEnabled,
         targets.map((t) => ({ provider: t, model_id: modelChoice[t] ?? null, reasoning: reasoningChoice[t] ?? null })),
-        null, true
+        null, true, activeScope
       );
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No readable stream");
@@ -816,7 +890,7 @@ export default function Ask() {
       const res = await api.askStream(
         turn.question, null, undefined, convId, companyKbEnabled, googleDriveEnabled,
         [{ provider: target, model_id: modelChoice[target] ?? null, reasoning: reasoningChoice[target] ?? null }],
-        passed
+        passed, false, activeScope
       );
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No readable stream");
@@ -898,7 +972,10 @@ export default function Ask() {
         activeConvId,
         companyKbEnabled,
         googleDriveEnabled,
-        modelsPayload
+        modelsPayload,
+        null,
+        false,
+        activeScope
       );
       
       const reader = res.body?.getReader();
@@ -1351,7 +1428,7 @@ export default function Ask() {
                       <div className="user-message">
                         <span className="avatar is-small">PA</span>
                         <div>
-                          {turn.question}
+                          <RenderUserQuestion text={turn.question} />
                           {(() => {
                             const n = Object.keys(turn.providerChunks ?? {}).filter((k) => k !== "Notice").length;
                             if (n === 0) return null;
@@ -1894,7 +1971,7 @@ export default function Ask() {
                       if (levels.length === 0) return null;
                       return (
                         <select
-                          value={reasoningChoice[p.provider] ?? "none"}
+                          value={reasoningChoice[p.provider] ?? ver?.default_reasoning ?? p.default_reasoning ?? (p.provider === "vllm" ? "none" : "low")}
                           disabled={!enabled}
                           onChange={(e) => setReasoningChoice((cur) => ({ ...cur, [p.provider]: e.target.value }))}
                           title="Reasoning effort"
@@ -2119,14 +2196,19 @@ export default function Ask() {
             <form className="ask-composer" onSubmit={submit}>
               <label>
                 <span className="sr-only">Ask a question about your documents</span>
-                <input
-                  ref={inputRef}
-                  value={question}
-                  onChange={handleInputChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask a question, or use @ to filter by Document or Class..."
-                  disabled={busy}
-                />
+                <div className="ask-input-box">
+                  <span className="ask-input-logo" aria-hidden="true" title="DocVault AI Assistant">
+                    <Sparkles size={15} />
+                  </span>
+                  <input
+                    ref={inputRef}
+                    value={question}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask a question, or use @ to filter by Document or Class..."
+                    disabled={busy}
+                  />
+                </div>
               </label>
               <motion.button
                 className="button primary send-button"

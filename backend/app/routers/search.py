@@ -247,6 +247,7 @@ async def ask(
         model_selections=payload.models,
         passed_answers=payload.passed_answers,
         rerun=payload.rerun,
+        active_scope=payload.active_scope,
         context=get_request_context(request),
     )
     return StreamingResponse(stream_gen, media_type="text/event-stream")
@@ -480,6 +481,40 @@ async def get_conversation(
         enabled_models=conv.enabled_models,
         messages=messages,
     )
+
+
+@router.put("/conversations/{conversation_id}/scope")
+async def set_conversation_scope(
+    conversation_id: str,
+    payload: schemas.ActiveScopeInfo,
+    user: models.User = Depends(require("VIEW")),
+    db: Session = Depends(get_db),
+):
+    """Update active document and class filters for a conversation."""
+    mongo_db = get_mongo_db()
+    if mongo_db is None:
+        return {"updated": True}
+    conv = await ask_ai_repository.get_conversation(mongo_db, conversation_id, user.id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    from ..services.ask_ai.mongo_models import ScopedDocument, ScopedClass
+    allowed_ids = search_authorization.resolve_view_document_ids_for_user_id(db, user.id)
+    
+    docs = [
+        ScopedDocument(document_id=d.document_id, title=d.title)
+        for d in payload.documents
+        if allowed_ids is None or d.document_id in allowed_ids
+    ]
+    classes = [
+        ScopedClass(class_id=c.class_id, class_name=c.class_name, document_ids=c.document_ids)
+        for c in payload.classes
+    ]
+    active_scope = ActiveScope(documents=docs, classes=classes)
+    await ask_ai_repository.update_conversation_scope(
+        mongo_db, conversation_id, user.id, active_scope, None
+    )
+    return {"updated": True, "active_scope": active_scope.model_dump()}
 
 
 @router.delete("/conversations/{conversation_id}/scope")

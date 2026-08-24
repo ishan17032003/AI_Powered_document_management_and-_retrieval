@@ -188,12 +188,14 @@ export interface AskModelVersion {
   pricing_per_mtok: { in: number; out: number };
   default: boolean;
   reasoning_levels?: string[];
+  default_reasoning?: string;
 }
 
 export interface AskProviderInfo {
   provider: string;
   display_name: string;
   color: string;
+  default_reasoning?: string;
   versions: AskModelVersion[];
 }
 
@@ -554,6 +556,12 @@ export const api = {
       body: JSON.stringify(payload || {}),
     }),
   getConversation: (id: string) => req<ConversationDetail>(`/search/conversations/${encodeURIComponent(id)}`),
+  updateConversationScope: (id: string, scope: ActiveScopeInfo) =>
+    req<{ updated: boolean; active_scope: ActiveScopeInfo }>(`/search/conversations/${encodeURIComponent(id)}/scope`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scope),
+    }),
   clearConversationScope: (id: string) =>
     req<{ cleared: boolean }>(`/search/conversations/${encodeURIComponent(id)}/scope`, { method: "DELETE" }),
   deleteConversation: (id: string) =>
@@ -578,7 +586,8 @@ export const api = {
     google_drive_enabled = false,
     models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null,
     passed_answers?: { provider: string; model_id?: string | null; content: string }[] | null,
-    rerun?: boolean
+    rerun?: boolean,
+    active_scope?: ActiveScopeInfo | null
   ) => {
     const headers = new Headers({ "Content-Type": "application/json" });
     const token = getToken();
@@ -596,6 +605,7 @@ export const api = {
         models: models ?? null,
         passed_answers: passed_answers ?? null,
         rerun: rerun ?? false,
+        active_scope: active_scope ?? null,
       }),
     });
     if (!res.ok) throw new ApiError(res.status, "Ask stream failed");

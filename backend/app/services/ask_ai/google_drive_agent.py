@@ -75,9 +75,9 @@ async def get_valid_access_token(drive_token: dict) -> str | None:
 def extract_search_keywords(question: str, hint_documents: list[str] | None = None) -> list[str]:
     """Extract search terms and phrases ensuring all key terms from the user query are preserved.
     
-    For multi-word queries like 'sales ai bugs', produces combinations like:
-    ['sales ai bugs', 'sales bugs', 'sales ai', 'ai bugs']
-    and avoids isolated generic single words like 'bugs' alone.
+    For multi-word queries like 'are their any high severity sales chatbot bugs still open',
+    produces combinations like:
+    ['sales chatbot bugs', 'sales chatbot', 'chatbot bugs', 'sales bugs', 'chatbot', 'sales']
     """
     terms: list[str] = []
 
@@ -99,9 +99,15 @@ def extract_search_keywords(question: str, hint_documents: list[str] | None = No
         "into", "through", "during", "before", "after", "above", "below", "to",
         "from", "up", "down", "in", "out", "on", "off", "over", "under", "again",
         "further", "then", "once", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "can", "could", "should", "would",
-        "get", "me", "show", "find", "list", "tell", "give", "please", "all",
-        "detail", "details", "explain", "summarize", "summary", "regarding",
+        "have", "has", "had", "having", "do", "does", "did", "doing", "can", "could",
+        "should", "would", "may", "might", "must", "shall", "will", "get", "me",
+        "show", "find", "list", "tell", "give", "please", "all", "any", "some",
+        "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too",
+        "very", "there", "their", "they", "them", "theirs", "they're", "these",
+        "those", "this", "that", "it", "its", "still", "open", "closed", "check",
+        "verify", "detail", "details", "explain", "summarize", "summary", "regarding",
+        "question", "answer", "currently", "now", "here", "just", "also", "much",
+        "many", "more", "most", "other", "few", "both", "each",
     }
     
     words = [w.strip() for w in clean_q.split() if w.lower().strip() not in stop_words and len(w.strip()) >= 2]
@@ -109,32 +115,43 @@ def extract_search_keywords(question: str, hint_documents: list[str] | None = No
     if not words:
         if clean_q and clean_q not in terms:
             terms.append(clean_q)
-        return terms[:6]
+        return terms[:10]
 
     # Full phrase
     full_phrase = " ".join(words)
     if full_phrase not in terms:
         terms.append(full_phrase)
 
-    if len(words) == 2:
-        # 2 words -> full phrase is primary
-        pass
-    elif len(words) >= 3:
-        # Multi-word combinations retaining the primary/core terms
-        primary = words[0]
-        # Primary + each subsequent word (e.g. 'sales bugs', 'sales ai')
-        for w in words[1:]:
-            comb = f"{primary} {w}"
-            if comb not in terms:
-                terms.append(comb)
-        
-        # Adjacent pairs (e.g. 'ai bugs')
-        for i in range(1, len(words) - 1):
-            comb = f"{words[i]} {words[i+1]}"
-            if comb not in terms:
-                terms.append(comb)
+    # Core subject phrase (excluding common qualifiers/severity adjectives)
+    qualifiers = {
+        "high", "severity", "critical", "low", "medium", "major", "minor", "urgent",
+        "recent", "latest", "current", "new", "old", "top", "best", "total", "count",
+        "number", "list", "status", "issue", "issues",
+    }
+    core_words = [w for w in words if w.lower() not in qualifiers]
+    if core_words and len(core_words) != len(words):
+        core_phrase = " ".join(core_words)
+        if core_phrase not in terms:
+            terms.append(core_phrase)
 
-    return terms[:8]
+    # Multi-word combinations from core_words or words (e.g. 'sales chatbot', 'chatbot bugs', 'sales bugs')
+    active_word_list = core_words if len(core_words) >= 2 else words
+    for i in range(len(active_word_list)):
+        for j in range(i + 1, len(active_word_list)):
+            comb = f"{active_word_list[i]} {active_word_list[j]}"
+            if comb not in terms:
+                terms.append(comb)
+            if j + 1 < len(active_word_list):
+                comb3 = f"{active_word_list[i]} {active_word_list[j]} {active_word_list[j+1]}"
+                if comb3 not in terms:
+                    terms.append(comb3)
+
+    # Individual key words (length >= 4)
+    for w in (core_words or words):
+        if len(w) >= 4 and w not in terms:
+            terms.append(w)
+
+    return terms[:12]
 
 
 async def search_drive_files(
@@ -279,22 +296,19 @@ async def run(
         return []
 
     keywords = extract_search_keywords(question, hint_documents=mentions.get("documents", []))
+    if history:
+        for h in reversed(history[-4:]):
+            h_text = h.get("content", "")
+            if h_text and h_text != question:
+                h_kws = extract_search_keywords(h_text)
+                for kw in h_kws:
+                    if kw not in keywords:
+                        keywords.append(kw)
+
     _log.info("Google Drive search keywords: %s", keywords)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         files = await search_drive_files(client, token, keywords, max_results=50)
-        
-        # If no files found and history is present, search using prior user query keywords
-        if not files and history:
-            for h in reversed(history):
-                if h.get("role") == "user" and h.get("content") != question:
-                    hist_keywords = extract_search_keywords(h["content"])
-                    if hist_keywords:
-                        _log.info("Retrying Google Drive search with historical keywords: %s", hist_keywords)
-                        files = await search_drive_files(client, token, hist_keywords, max_results=50)
-                        if files:
-                            keywords = hist_keywords + keywords
-                            break
 
         if not files:
             _log.info("No files matched Google Drive query for keywords: %s", keywords)
@@ -310,10 +324,18 @@ async def run(
             if not fid:
                 continue
             file_map[fid] = f
+            file_name_clean = re.sub(r"\.[a-zA-Z0-9]+$", "", (f.get("name") or "").lower()).strip()
             file_name_lower = (f.get("name") or "").lower()
             matched = [kw for kw in keywords if kw.lower() in file_name_lower]
             file_matched_keywords[fid] = matched
-            file_scores[fid] = len(matched) * 2  # Higher score for name match
+            score = 0
+            for kw in keywords:
+                kw_l = kw.lower()
+                if kw_l == file_name_clean:
+                    score += 50
+                elif kw_l in file_name_lower:
+                    score += 10 * len(kw.split())
+            file_scores[fid] = score
 
         # Sort by match score and recency
         sorted_file_ids = sorted(
@@ -345,7 +367,7 @@ async def run(
             enriched_files.append({
                 **file_meta,
                 "matched_keywords": matched if matched else keywords[:1],
-                "match_score": max(1, len(matched)),
+                "match_score": max(file_scores.get(fid, 1), len(matched)),
                 "content": content,
             })
 

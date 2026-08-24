@@ -304,10 +304,12 @@ async def get_history_window(
         cursor = (
             db[_HISTORY]
             .find(query, {"_id": 1, "role": 1, "content": 1, "created_at": 1, "sources_used": 1})
-            .sort("created_at", 1)
+            .sort("created_at", -1)
             .limit(limit)
         )
-        return [doc async for doc in cursor]
+        docs = [doc async for doc in cursor]
+        docs.reverse()
+        return docs
     except Exception as exc:
         _log.warning("get_history_window failed: %s", exc)
         return []

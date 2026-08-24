@@ -49,9 +49,17 @@ def parse_mentions(message: str) -> dict:
 
     drive = bool(_DRIVE_PATTERN.search(message))
 
-    clean = _DOC_PATTERN.sub("", message)
-    clean = _CLASS_PATTERN.sub("", clean)
-    clean = _DRIVE_PATTERN.sub("", clean)
+    def _replace_doc(m: re.Match) -> str:
+        title = (m.group(1) or m.group(2) or "").strip()
+        return f"'{title}'" if title else ""
+
+    def _replace_class(m: re.Match) -> str:
+        name = (m.group(1) or m.group(2) or "").strip()
+        return f"'{name}'" if name else ""
+
+    clean = _DOC_PATTERN.sub(_replace_doc, message)
+    clean = _CLASS_PATTERN.sub(_replace_class, clean)
+    clean = _DRIVE_PATTERN.sub("Google Drive", clean)
     clean = re.sub(r"\s{2,}", " ", clean).strip()
 
     return {

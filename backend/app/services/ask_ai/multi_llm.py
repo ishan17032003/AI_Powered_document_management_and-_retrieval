@@ -816,7 +816,10 @@ async def synthesize_parallel_stream(
             choice = {"model_id": choice}
         version = model_registry.resolve(provider, choice.get("model_id"), configured)
         if version is not None:
-            runs.append((provider, version, choice.get("reasoning")))
+            r_level = choice.get("reasoning")
+            if (r_level is None or r_level == "") and version.reasoning_levels:
+                r_level = getattr(version, "default_reasoning", "low")
+            runs.append((provider, version, r_level))
 
     if not runs:
         msg = (

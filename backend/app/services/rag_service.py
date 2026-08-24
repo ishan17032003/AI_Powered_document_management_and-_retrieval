@@ -929,9 +929,11 @@ def ask(
         if not doc:
             return Answer(answer="That document no longer exists.", mode="extractive")
         
-        passages = _doc_windows(doc, _PER_DOC_CHARS, combined_terms or terms, _MAX_PASSAGES)
+        passages = _doc_windows(doc, _PER_DOC_CHARS, terms, _MAX_PASSAGES)
+        if not passages and history_terms:
+            passages = _doc_windows(doc, _PER_DOC_CHARS, history_terms, _MAX_PASSAGES)
         if not passages:
-            passage = _doc_passage(doc, limit, combined_terms or terms)
+            passage = _doc_passage(doc, limit, terms)
             if passage:
                 passages = [passage]
         if not passages:
@@ -999,7 +1001,7 @@ def ask(
     #   c) Number all passages sequentially and send them all to the LLM.
     #   d) Never ask the user to disambiguate — just answer from everything.
 
-    distinctive = [t for t in (combined_terms or terms) if len(t) > 2]
+    distinctive = [t for t in terms if len(t) > 2]
 
     passages: list[Passage] = []
     seen_ids: set[int] = set()
@@ -1008,18 +1010,18 @@ def ask(
     # They don't consume numbered passage slots; they use the [OKF] tag.
     rag_slot_limit = _MAX_PASSAGES
 
-    # a) Content and title matched documents (boosted by relevance score, highest first).
-    for doc, _score in _candidate_documents(db, combined_terms or terms, allowed_ids):
+    # a) Content and title matched documents using current query terms across the whole repository
+    for doc, _score in _candidate_documents(db, terms, allowed_ids):
         if len(passages) >= rag_slot_limit:
             break
         if doc.id in seen_ids:
             continue
-        for p in _doc_windows(doc, _PER_DOC_CHARS, combined_terms or terms, rag_slot_limit - len(passages)):
+        for p in _doc_windows(doc, _PER_DOC_CHARS, terms, rag_slot_limit - len(passages)):
             p.index = len(passages) + 1
             passages.append(p)
             seen_ids.add(doc.id)
 
-    # b) Hybrid search hits — fill remaining slots.
+    # b) Hybrid search hits (Qdrant vector + FTS) — fill remaining slots across the repository
     if len(passages) < rag_slot_limit:
         distinctive_stems = {_stem(t) for t in distinctive}
         try:
@@ -1048,6 +1050,30 @@ def ask(
                 p.index = len(passages) + 1
                 passages.append(p)
                 seen_ids.add(doc_id)
+
+    # c) Contextual fallback: if current query terms yielded 0 passages and history terms exist (e.g. pronoun follow-up)
+    if not passages and history_terms:
+        for doc, _score in _candidate_documents(db, history_terms, allowed_ids):
+            if len(passages) >= rag_slot_limit:
+                break
+            if doc.id in seen_ids:
+                continue
+            for p in _doc_windows(doc, _PER_DOC_CHARS, history_terms, rag_slot_limit - len(passages)):
+                p.index = len(passages) + 1
+                passages.append(p)
+                seen_ids.add(doc.id)
+
+    # d) Multi-document scoped fallback: if specific documents are scoped (allowed_ids <= 10) and not all have passages (e.g. "compare Document A and B")
+    if allowed_ids and len(allowed_ids) <= 10:
+        for doc_id in allowed_ids:
+            if doc_id not in seen_ids and len(passages) < rag_slot_limit:
+                doc = rag_repository.get_document(db, doc_id)
+                if doc and doc.versions:
+                    p = _doc_passage(doc, limit, terms)
+                    if p:
+                        p.index = len(passages) + 1
+                        passages.append(p)
+                        seen_ids.add(doc_id)
 
     # Resolve once more after retrieval and hydration.  This is the
     # authoritative boundary immediately before context construction/provider

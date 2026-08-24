@@ -270,19 +270,20 @@ class ToolContext:
         from ... import models
 
         kind = str(args.get("kind", "recent"))
+        doc_class = str(args.get("doc_class", "")).strip()
         limit = min(int(args.get("limit") or 15), _MAX_LIST_LIMIT)
-        q = self._db.query(models.Document).filter(models.Document.status == "active")
+        q = self._db.query(models.Document).filter(models.Document.lifecycle_state != "DELETED")
         if self._allowed_ids is not None:
             if not self._allowed_ids:
                 return {"documents": [], "count": 0}
             q = q.filter(models.Document.id.in_(self._allowed_ids))
-        if kind == "by_class":
-            doc_class = str(args.get("doc_class", "")).strip()
-            if not doc_class:
+        if kind == "by_class" or doc_class:
+            if not doc_class and kind == "by_class":
                 return {"error": "doc_class is required for kind='by_class'"}
-            q = q.join(models.DocClass, models.Document.doc_class).filter(
-                models.DocClass.name.ilike(doc_class)
-            )
+            if doc_class:
+                q = q.join(models.DocClass, models.Document.class_id == models.DocClass.id).filter(
+                    models.DocClass.name.ilike(doc_class)
+                )
         rows = q.order_by(models.Document.created_at.desc()).limit(limit).all()
         documents = [
             {

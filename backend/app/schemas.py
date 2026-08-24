@@ -323,7 +323,7 @@ class ModelSelection(RequestModel):
 
     provider: str = Field(min_length=1, max_length=32)
     model_id: str | None = Field(default=None, max_length=128)
-    reasoning: Literal["none", "low", "medium", "high"] | None = None
+    reasoning: Literal["none", "low", "medium", "high"] | None = Field(default="low")
 
 
 class PassedAnswer(RequestModel):
@@ -349,6 +349,7 @@ class AskQuery(RequestModel):
     conversation_id: str | None = Field(default=None, max_length=64)
     company_kb_enabled: bool = True
     google_drive_enabled: bool = False
+    active_scope: ActiveScopeInfo | None = None
 
     @model_validator(mode="after")
     def _ensure_source_selection(self) -> "AskQuery":
