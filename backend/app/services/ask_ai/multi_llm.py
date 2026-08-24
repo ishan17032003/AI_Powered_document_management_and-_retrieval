@@ -207,7 +207,7 @@ async def _stream_anthropic(messages, api_key: str, model_id: str, tools_ctx=Non
     tool_schemas = tool_defs.anthropic_tool_schemas(capabilities) if tools_ctx is not None else None
     usage_acc = {"in": 0, "out": 0}
     got_usage = False
-    effective_model = model_id or "claude-opus-5"
+    effective_model = model_id or "claude-haiku-4-5-20251001"
 
     for round_no in range(_MAX_TOOL_ROUNDS + 1):
         budget = _THINKING_BUDGETS.get(reasoning or "")
@@ -235,9 +235,9 @@ async def _stream_anthropic(messages, api_key: str, model_id: str, tools_ctx=Non
                     yield {"text": text}
                 final = await stream.get_final_message()
         except NotFoundError as err:
-            if effective_model != "claude-opus-5":
-                _log.warning("Anthropic model %s not found (404), retrying with claude-opus-5: %s", effective_model, err)
-                effective_model = "claude-opus-5"
+            if effective_model != "claude-haiku-4-5-20251001":
+                _log.warning("Anthropic model %s not found (404), retrying with claude-haiku-4-5-20251001: %s", effective_model, err)
+                effective_model = "claude-haiku-4-5-20251001"
                 request["model"] = effective_model
                 async with client.messages.stream(**request) as stream:
                     async for text in stream.text_stream:

@@ -64,10 +64,10 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="Claude",
         color="#d97757",
         versions=(
-            ModelVersion("claude-opus-5", "Opus 5", ("text", "code", "html", "report", "vision"), 5.00, 25.00, default=True, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 0.80, 4.00, default=True, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-sonnet-5", "Sonnet 5", ("text", "code", "html", "vision"), 2.00, 10.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-opus-5", "Opus 5", ("text", "code", "html", "report", "vision"), 5.00, 25.00, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-fable-5", "Fable 5", ("text", "code", "html", "report", "vision"), 10.00, 50.00, reasoning_levels=REASONING_LEVELS),
-            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 0.80, 4.00, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-sonnet-4-5-20250929", "Sonnet 4.5", ("text", "code", "html", "vision"), 2.00, 10.00, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-opus-4-8", "Opus 4.8", ("text", "code", "html", "report", "vision"), 5.00, 25.00, reasoning_levels=REASONING_LEVELS),
         ),
