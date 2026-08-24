@@ -261,6 +261,14 @@ def ask_models(user: models.User = Depends(require("VIEW"))):
     return {"providers": model_registry.to_public(model_registry.available_providers(get_configured_providers()))}
 
 
+@router.get("/ask/models/live")
+async def ask_models_live(provider: str | None = None, user: models.User = Depends(require("VIEW"))):
+    """Query live provider APIs directly to list available models for configured keys."""
+    from ..services.ask_ai import model_registry
+
+    return {"live_models": await model_registry.fetch_live_models(provider)}
+
+
 @router.get("/ask/usage")
 async def ask_usage(user: models.User = Depends(require("VIEW"))):
     """Today's Ask AI usage vs the configured budgets (0 = unlimited)."""

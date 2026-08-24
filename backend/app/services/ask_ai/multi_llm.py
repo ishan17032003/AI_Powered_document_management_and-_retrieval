@@ -191,7 +191,7 @@ _THINKING_BUDGETS = {"low": 2048, "medium": 8192, "high": 16384}
 
 
 async def _stream_anthropic(messages, api_key: str, model_id: str, tools_ctx=None, capabilities: tuple[str, ...] = (), provider: str = "", reasoning: str | None = None):
-    from anthropic import AsyncAnthropic
+    from anthropic import AsyncAnthropic, NotFoundError
 
     from . import tools as tool_defs
 
@@ -207,27 +207,78 @@ async def _stream_anthropic(messages, api_key: str, model_id: str, tools_ctx=Non
     tool_schemas = tool_defs.anthropic_tool_schemas(capabilities) if tools_ctx is not None else None
     usage_acc = {"in": 0, "out": 0}
     got_usage = False
+    effective_model = model_id or "claude-opus-5"
 
     for round_no in range(_MAX_TOOL_ROUNDS + 1):
         budget = _THINKING_BUDGETS.get(reasoning or "")
+        is_adaptive = any(x in effective_model for x in ["-5", "-4-8", "-4-7", "-4-6"]) and "haiku" not in effective_model and "-4-5" not in effective_model
+
         request: dict = {
-            "max_tokens": (budget + 2048) if budget else 1024,
+            "max_tokens": (budget + 2048) if (budget and not is_adaptive) else 2048,
             "system": system,
             "messages": anthropic_messages,
-            "model": model_id,
+            "model": effective_model,
         }
-        if budget:
-            # Extended thinking: temperature must stay unset and max_tokens
-            # must exceed the thinking budget.
-            request["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        else:
-            request["temperature"] = 0.2
+        if reasoning in ("low", "medium", "high"):
+            if is_adaptive:
+                request["thinking"] = {"type": "adaptive"}
+                request["output_config"] = {"effort": reasoning}
+            elif budget:
+                request["thinking"] = {"type": "enabled", "budget_tokens": budget}
         if tool_schemas and round_no < _MAX_TOOL_ROUNDS:
             request["tools"] = tool_schemas
-        async with client.messages.stream(**request) as stream:
-            async for text in stream.text_stream:
-                yield {"text": text}
-            final = await stream.get_final_message()
+        
+        try:
+            stream_ctx = client.messages.stream(**request)
+            async with stream_ctx as stream:
+                async for text in stream.text_stream:
+                    yield {"text": text}
+                final = await stream.get_final_message()
+        except NotFoundError as err:
+            if effective_model != "claude-opus-5":
+                _log.warning("Anthropic model %s not found (404), retrying with claude-opus-5: %s", effective_model, err)
+                effective_model = "claude-opus-5"
+                request["model"] = effective_model
+                async with client.messages.stream(**request) as stream:
+                    async for text in stream.text_stream:
+                        yield {"text": text}
+                    final = await stream.get_final_message()
+            else:
+                raise
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if "thinking" in err_str or "adaptive" in err_str or "output_config" in err_str:
+                _log.warning("Anthropic thinking error on model %s (%s), retrying with adjusted thinking config", effective_model, exc)
+                # If adaptive was used, try budget enabled
+                if is_adaptive and budget:
+                    request["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                    request.pop("output_config", None)
+                    request["max_tokens"] = budget + 2048
+                elif not is_adaptive and reasoning in ("low", "medium", "high"):
+                    request["thinking"] = {"type": "adaptive"}
+                    request["output_config"] = {"effort": reasoning}
+                    request["max_tokens"] = 2048
+                else:
+                    request.pop("thinking", None)
+                    request.pop("output_config", None)
+                
+                try:
+                    async with client.messages.stream(**request) as stream:
+                        async for text in stream.text_stream:
+                            yield {"text": text}
+                        final = await stream.get_final_message()
+                except Exception as retry_exc:
+                    # Final fallback: retry with thinking completely removed
+                    _log.warning("Anthropic retry failed (%s), retrying plain without thinking", retry_exc)
+                    request.pop("thinking", None)
+                    request.pop("output_config", None)
+                    async with client.messages.stream(**request) as stream:
+                        async for text in stream.text_stream:
+                            yield {"text": text}
+                        final = await stream.get_final_message()
+            else:
+                raise
+
         if final and final.usage:
             usage_acc["in"] += final.usage.input_tokens or 0
             usage_acc["out"] += final.usage.output_tokens or 0
@@ -257,30 +308,94 @@ async def _stream_anthropic(messages, api_key: str, model_id: str, tools_ctx=Non
         yield {"usage": usage_acc}
 
 
-async def _stream_gemini(messages, api_key: str, model_id: str):
-    import google.generativeai as genai
+async def _stream_gemini(messages, api_key: str, model_id: str, reasoning: str | None = None):
+    """Direct HTTP SSE streaming for Google Gemini models."""
+    clean_model_id = model_id.replace("models/", "") if model_id else "gemini-2.5-flash"
 
-    genai.configure(api_key=api_key)
-    system = ""
-    gemini_messages = []
+    contents = []
+    system_instruction = None
     for m in messages:
         if m["role"] == "system":
-            system += m["content"] + "\n"
+            system_instruction = {"parts": [{"text": m["content"]}]}
         elif m["role"] == "user":
-            gemini_messages.append({"role": "user", "parts": [m["content"]]})
+            contents.append({"role": "user", "parts": [{"text": m["content"]}]})
         elif m["role"] == "assistant":
-            gemini_messages.append({"role": "model", "parts": [m["content"]]})
-    model = genai.GenerativeModel(model_id, system_instruction=system)
-    response = await model.generate_content_async(gemini_messages, stream=True)
-    usage = None
-    async for chunk in response:
-        if chunk.text:
-            yield {"text": chunk.text}
-        meta = getattr(chunk, "usage_metadata", None)
-        if meta and getattr(meta, "candidates_token_count", 0):
-            usage = {"in": meta.prompt_token_count or 0, "out": meta.candidates_token_count or 0}
-    if usage:
-        yield {"usage": usage}
+            contents.append({"role": "model", "parts": [{"text": m["content"]}]})
+
+    payload: dict = {"contents": contents}
+    if system_instruction:
+        payload["system_instruction"] = system_instruction
+
+    gen_config: dict = {}
+    if reasoning in ("low", "medium", "high"):
+        budget_map = {"low": 2048, "medium": 8192, "high": 16384}
+        gen_config["thinking_config"] = {"thinking_budget": budget_map.get(reasoning, 2048)}
+    if gen_config:
+        payload["generation_config"] = gen_config
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model_id}:streamGenerateContent?alt=sse&key={api_key}"
+
+    usage_acc = {"in": 0, "out": 0}
+    got_usage = False
+
+    async with httpx.AsyncClient(timeout=35.0) as client:
+        try:
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    err_body = await response.aread()
+                    err_text = err_body.decode("utf-8", errors="replace")
+                    # Auto fallback to gemini-2.5-flash if custom/preview model failed
+                    if clean_model_id != "gemini-2.5-flash":
+                        _log.warning("Gemini model %s returned %s (%s), falling back to gemini-2.5-flash", clean_model_id, response.status_code, err_text[:100])
+                        fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key={api_key}"
+                        payload.pop("generation_config", None)
+                        async with client.stream("POST", fb_url, json=payload) as fb_res:
+                            if fb_res.status_code == 200:
+                                async for line in fb_res.aiter_lines():
+                                    if line.startswith("data: "):
+                                        try:
+                                            chunk_data = json.loads(line[6:])
+                                            candidates = chunk_data.get("candidates", [])
+                                            if candidates:
+                                                parts = candidates[0].get("content", {}).get("parts", [])
+                                                for p in parts:
+                                                    if "text" in p and p["text"]:
+                                                        yield {"text": p["text"]}
+                                            meta = chunk_data.get("usageMetadata")
+                                            if meta:
+                                                usage_acc["in"] = meta.get("promptTokenCount", 0) or usage_acc["in"]
+                                                usage_acc["out"] = meta.get("candidatesTokenCount", 0) or usage_acc["out"]
+                                                got_usage = True
+                                        except Exception:
+                                            pass
+                                if got_usage:
+                                    yield {"usage": usage_acc}
+                                return
+                    raise RuntimeError(f"Gemini API error ({response.status_code}): {err_text[:200]}")
+
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        try:
+                            chunk_data = json.loads(line[6:])
+                            candidates = chunk_data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                for p in parts:
+                                    if "text" in p and p["text"]:
+                                        yield {"text": p["text"]}
+                            meta = chunk_data.get("usageMetadata")
+                            if meta:
+                                usage_acc["in"] = meta.get("promptTokenCount", 0) or usage_acc["in"]
+                                usage_acc["out"] = meta.get("candidatesTokenCount", 0) or usage_acc["out"]
+                                got_usage = True
+                        except Exception:
+                            pass
+        except Exception as exc:
+            _log.warning("Gemini stream exception: %s", exc)
+            raise
+
+    if got_usage:
+        yield {"usage": usage_acc}
 
 
 async def _stream_openai_responses(messages, model_id: str, tools_ctx, *, api_key: str, capabilities: tuple[str, ...] = (), provider: str = "openai", reasoning: str | None = None):
@@ -604,10 +719,8 @@ _STREAMS = {
             capabilities=caps, provider="openai", reasoning=reasoning)),
     "claude": lambda messages, model_id, tools_ctx, caps, reasoning: _stream_anthropic(
         messages, _key("anthropic_api_key", "DOCVAULT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"), model_id, tools_ctx, capabilities=caps, provider="claude", reasoning=reasoning),
-    # Gemini runs text-only in Phase 2 (function-calling and thinking-budget
-    # wiring land with the google-genai SDK migration).
     "gemini": lambda messages, model_id, tools_ctx, caps, reasoning: _stream_gemini(
-        messages, _key("gemini_api_key", "DOCVAULT_GEMINI_API_KEY", "GEMINI_API_KEY"), model_id),
+        messages, _key("gemini_api_key", "DOCVAULT_GEMINI_API_KEY", "GEMINI_API_KEY"), model_id, reasoning=reasoning),
     "vllm": lambda messages, model_id, tools_ctx, caps, reasoning: _stream_vllm_prompted_tools(
         messages, model_id, tools_ctx,
         base_url=_key("vllm_url", "DOCVAULT_VLLM_URL", "VLLM_URL"), capabilities=caps),

@@ -95,7 +95,7 @@ async def google_drive_status(
 
 
 @router.get("/google/connect")
-def google_drive_connect(
+async def google_drive_connect(
     user: models.User = Depends(get_current_user),
 ):
     """Return the Google OAuth authorization URL for Drive access.
@@ -108,6 +108,7 @@ def google_drive_connect(
             detail="Google OAuth is not configured on this server. Set DOCVAULT_GOOGLE_CLIENT_ID and DOCVAULT_GOOGLE_CLIENT_SECRET.",
         )
     try:
+        from datetime import datetime, timezone
         from google_auth_oauthlib.flow import Flow  # type: ignore[import]
 
         flow = Flow.from_client_config(
@@ -133,11 +134,27 @@ def google_drive_connect(
             include_granted_scopes="true",
             prompt="consent",
         )
-        # Store user_id and code_verifier for PKCE token exchange
-        OAUTH_SESSIONS[state] = {
+        
+        session_data = {
             "user_id": user.id,
             "code_verifier": getattr(flow, "code_verifier", None),
+            "created_at": datetime.now(timezone.utc),
         }
+        # In-memory session tracking
+        OAUTH_SESSIONS[state] = session_data
+
+        # Durable MongoDB session tracking (supports multi-worker / multi-container)
+        mongo_db = get_mongo_db()
+        if mongo_db is not None:
+            try:
+                await mongo_db["oauth_sessions"].update_one(
+                    {"state": state},
+                    {"$set": session_data},
+                    upsert=True,
+                )
+            except Exception as m_err:
+                _log.warning("Failed to store OAuth session in MongoDB: %s", m_err)
+
         return {"auth_url": auth_url, "state": state}
     except ImportError:
         raise HTTPException(
@@ -162,19 +179,29 @@ async def google_drive_callback(
         _log.warning("Google OAuth callback returned error: %s", error)
         return _oauth_popup_close(success=False, message=f"Google OAuth error: {error}")
 
-    if not code:
-        _log.warning("Google OAuth callback missing code")
-        return _oauth_popup_close(success=False, message="Missing OAuth authorization code.")
+    if not code or not state:
+        _log.warning("Google OAuth callback missing code or state")
+        return _oauth_popup_close(success=False, message="Missing OAuth authorization code or state.")
 
+    # Retrieve session info from in-memory cache or MongoDB
     session_info = OAUTH_SESSIONS.pop(state, {}) if state else {}
+    if not session_info.get("user_id"):
+        mongo_db = get_mongo_db()
+        if mongo_db is not None:
+            try:
+                doc = await mongo_db["oauth_sessions"].find_one_and_delete({"state": state})
+                if doc:
+                    session_info = doc
+            except Exception as m_err:
+                _log.warning("Failed to query OAuth session from MongoDB: %s", m_err)
+
     postgres_user_id = session_info.get("user_id")
-    if not postgres_user_id and state:
-        try:
-            postgres_user_id = int(state)
-        except ValueError:
-            postgres_user_id = 1
-    elif not postgres_user_id:
-        postgres_user_id = 1
+    if not postgres_user_id:
+        _log.warning("Google OAuth callback: no active session found for state %s", state)
+        return _oauth_popup_close(
+            success=False,
+            message="OAuth session expired or invalid. Please try connecting Google Drive again from your account.",
+        )
 
     code_verifier = session_info.get("code_verifier")
 

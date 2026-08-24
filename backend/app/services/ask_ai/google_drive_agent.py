@@ -73,13 +73,16 @@ async def get_valid_access_token(drive_token: dict) -> str | None:
 
 
 def extract_search_keywords(question: str, hint_documents: list[str] | None = None) -> list[str]:
-    """Extract search terms and phrases from user question and mentions."""
-    terms: list[str] = []
+    """Extract search terms and phrases ensuring all key terms from the user query are preserved.
     
-    # 1. Cleaned full question
-    clean_q = re.sub(r"[^a-zA-Z0-9\s_-]", " ", question).strip()
-    if clean_q:
-        terms.append(clean_q)
+    For multi-word queries like 'sales ai bugs', produces combinations like:
+    ['sales ai bugs', 'sales bugs', 'sales ai', 'ai bugs']
+    and avoids isolated generic single words like 'bugs' alone.
+    """
+    terms: list[str] = []
+
+    # 1. Clean question
+    clean_q = re.sub(r"[^\w\s-]", " ", question).strip()
 
     # 2. Add document hints from mentions
     if hint_documents:
@@ -88,7 +91,7 @@ def extract_search_keywords(question: str, hint_documents: list[str] | None = No
             if name_no_ext and name_no_ext not in terms:
                 terms.append(name_no_ext)
 
-    # 3. Extract meaningful multi-word phrases or key nouns/verbs (remove stop words)
+    # 3. Extract meaningful key words
     stop_words = {
         "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
         "a", "an", "the", "and", "or", "but", "if", "because", "as", "until",
@@ -98,17 +101,40 @@ def extract_search_keywords(question: str, hint_documents: list[str] | None = No
         "further", "then", "once", "is", "are", "was", "were", "be", "been", "being",
         "have", "has", "had", "do", "does", "did", "can", "could", "should", "would",
         "get", "me", "show", "find", "list", "tell", "give", "please", "all",
+        "detail", "details", "explain", "summarize", "summary", "regarding",
     }
-    words = [w for w in clean_q.split() if w.lower() not in stop_words and len(w) >= 3]
-    if words:
-        phrase = " ".join(words)
-        if phrase not in terms:
-            terms.append(phrase)
-        for w in words:
-            if w not in terms:
-                terms.append(w)
+    
+    words = [w.strip() for w in clean_q.split() if w.lower().strip() not in stop_words and len(w.strip()) >= 2]
+    
+    if not words:
+        if clean_q and clean_q not in terms:
+            terms.append(clean_q)
+        return terms[:6]
 
-    return terms[:6]
+    # Full phrase
+    full_phrase = " ".join(words)
+    if full_phrase not in terms:
+        terms.append(full_phrase)
+
+    if len(words) == 2:
+        # 2 words -> full phrase is primary
+        pass
+    elif len(words) >= 3:
+        # Multi-word combinations retaining the primary/core terms
+        primary = words[0]
+        # Primary + each subsequent word (e.g. 'sales bugs', 'sales ai')
+        for w in words[1:]:
+            comb = f"{primary} {w}"
+            if comb not in terms:
+                terms.append(comb)
+        
+        # Adjacent pairs (e.g. 'ai bugs')
+        for i in range(1, len(words) - 1):
+            comb = f"{words[i]} {words[i+1]}"
+            if comb not in terms:
+                terms.append(comb)
+
+    return terms[:8]
 
 
 async def search_drive_files(
@@ -223,20 +249,21 @@ async def fetch_file_content(
         return f"[Error fetching content: {exc}]"
 
     return ""
-
-
 async def run(
     question: str,
     mentions: dict,
+    *,
     drive_token: dict | None = None,
+    history: list[dict] | None = None,
 ) -> list[dict]:
-    """Retrieve matching documents from Google Drive.
+    """Execute the Google Drive Agent to retrieve relevant user documents.
 
     Parameters
     ----------
-    question:    The user's query.
-    mentions:    Parsed mentions dict from mention_parser.parse_mentions().
+    question: The cleaned user query.
+    mentions: Parsed @ mentions.
     drive_token: Stored OAuth token dictionary from MongoDB.
+    history: Optional prior turn history for contextual pronoun resolution.
 
     Returns
     -------
@@ -256,6 +283,19 @@ async def run(
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         files = await search_drive_files(client, token, keywords, max_results=50)
+        
+        # If no files found and history is present, search using prior user query keywords
+        if not files and history:
+            for h in reversed(history):
+                if h.get("role") == "user" and h.get("content") != question:
+                    hist_keywords = extract_search_keywords(h["content"])
+                    if hist_keywords:
+                        _log.info("Retrying Google Drive search with historical keywords: %s", hist_keywords)
+                        files = await search_drive_files(client, token, hist_keywords, max_results=50)
+                        if files:
+                            keywords = hist_keywords + keywords
+                            break
+
         if not files:
             _log.info("No files matched Google Drive query for keywords: %s", keywords)
             return []
@@ -272,20 +312,18 @@ async def run(
             file_map[fid] = f
             file_name_lower = (f.get("name") or "").lower()
             matched = [kw for kw in keywords if kw.lower() in file_name_lower]
-            if not matched:
-                matched = keywords[:2]
             file_matched_keywords[fid] = matched
-            file_scores[fid] = len(matched)
+            file_scores[fid] = len(matched) * 2  # Higher score for name match
 
         # Sort by match score and recency
         sorted_file_ids = sorted(
             file_map.keys(),
-            key=lambda fid: (file_scores.get(fid, 1), file_map[fid].get("modifiedTime", "")),
+            key=lambda fid: (file_scores.get(fid, 0), file_map[fid].get("modifiedTime", "")),
             reverse=True,
         )
 
-        # Hard cap: select at most 5 files
-        selected_files = [file_map[fid] for fid in sorted_file_ids[:_DRIVE_MAX_DOCS]]
+        # Hard cap: select top candidates for content inspection
+        selected_files = [file_map[fid] for fid in sorted_file_ids[:_DRIVE_MAX_DOCS * 2]]
 
         # Fetch and extract file contents concurrently
         tasks = [fetch_file_content(client, token, f) for f in selected_files]
@@ -300,12 +338,19 @@ async def run(
                 if kw.lower() in content_lower and kw not in matched:
                     matched.append(kw)
 
+            # Skip files with zero keyword matches unless specifically mentioned by name
+            if not matched and not mentions.get("documents"):
+                continue
+
             enriched_files.append({
                 **file_meta,
                 "matched_keywords": matched if matched else keywords[:1],
                 "match_score": max(1, len(matched)),
                 "content": content,
             })
+
+        # Re-sort enriched files by total match score
+        enriched_files.sort(key=lambda x: x.get("match_score", 0), reverse=True)
 
         _log.info("Google Drive retrieved %d enriched files.", len(enriched_files))
         return enriched_files[:_DRIVE_MAX_DOCS]

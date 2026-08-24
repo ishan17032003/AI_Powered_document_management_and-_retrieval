@@ -74,17 +74,187 @@ function withCitations(children: ReactNode): ReactNode {
   );
 }
 
+interface TableData {
+  headers: string[];
+  alignments: ("left" | "center" | "right")[];
+  rows: string[][];
+}
+
+function parseMarkdownTable(text: string): TableData | null {
+  const lines = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const isPipeRow = (l: string) => l.startsWith("|") && l.endsWith("|") && l.includes("|");
+  const isDelimiterRow = (l: string) => /^\|(\s*:?-+:?\s*\|)+$/.test(l);
+
+  if (!isPipeRow(lines[0]) || !isDelimiterRow(lines[1])) return null;
+
+  const parseCells = (row: string) => {
+    return row.slice(1, -1).split("|").map((c) => c.trim());
+  };
+
+  const headers = parseCells(lines[0]);
+  const delimiterCells = parseCells(lines[1]);
+
+  const alignments: ("left" | "center" | "right")[] = delimiterCells.map((c) => {
+    const start = c.startsWith(":");
+    const end = c.endsWith(":");
+    if (start && end) return "center";
+    if (end) return "right";
+    return "left";
+  });
+
+  const rows: string[][] = [];
+  for (let i = 2; i < lines.length; i++) {
+    if (isPipeRow(lines[i])) {
+      rows.push(parseCells(lines[i]));
+    }
+  }
+
+  return { headers, alignments, rows };
+}
+
+function parseContentWithTables(rawText: string): { type: "markdown" | "table"; content: string }[] {
+  if (!rawText || !rawText.includes("|")) {
+    return [{ type: "markdown", content: rawText }];
+  }
+  const lines = rawText.split("\n");
+  const segments: { type: "markdown" | "table"; content: string }[] = [];
+  let currentMdLines: string[] = [];
+  let currentTableLines: string[] = [];
+  let inTable = false;
+
+  const isTableLine = (line: string) => {
+    const trimmed = line.trim();
+    return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length >= 3;
+  };
+
+  const isDelimiterLine = (line: string) => {
+    const trimmed = line.trim();
+    return /^\|(\s*:?-+:?\s*\|)+$/.test(trimmed);
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!inTable) {
+      if (isTableLine(line) && i + 1 < lines.length && isDelimiterLine(lines[i + 1])) {
+        if (currentMdLines.length > 0) {
+          segments.push({ type: "markdown", content: currentMdLines.join("\n") });
+          currentMdLines = [];
+        }
+        inTable = true;
+        currentTableLines.push(line);
+      } else {
+        currentMdLines.push(line);
+      }
+    } else {
+      if (isTableLine(line) || isDelimiterLine(line)) {
+        currentTableLines.push(line);
+      } else {
+        segments.push({ type: "table", content: currentTableLines.join("\n") });
+        currentTableLines = [];
+        inTable = false;
+        currentMdLines.push(line);
+      }
+    }
+  }
+
+  if (inTable && currentTableLines.length > 0) {
+    segments.push({ type: "table", content: currentTableLines.join("\n") });
+  } else if (currentMdLines.length > 0) {
+    segments.push({ type: "markdown", content: currentMdLines.join("\n") });
+  }
+
+  return segments;
+}
+
+function AnswerMarkdownInline({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <>{withCitations(children)}</>,
+        strong: ({ children }) => <strong>{withCitations(children)}</strong>,
+        em: ({ children }) => <em>{withCitations(children)}</em>,
+        code: ({ children }) => <code className="ask-inline-code">{children}</code>,
+        a: ({ children }) => <>{withCitations(children)}</>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
+function MarkdownTableRenderer({ rawTable }: { rawTable: string }) {
+  const tableData = parseMarkdownTable(rawTable);
+  if (!tableData) {
+    return <ReactMarkdown components={answerMarkdownComponents}>{rawTable}</ReactMarkdown>;
+  }
+
+  return (
+    <div className="ask-table-wrapper">
+      <table className="ask-markdown-table">
+        <thead>
+          <tr>
+            {tableData.headers.map((h, i) => (
+              <th key={i} style={{ textAlign: tableData.alignments[i] || "left" }}>
+                <AnswerMarkdownInline text={h} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tableData.rows.map((row, rIdx) => (
+            <tr key={rIdx}>
+              {tableData.headers.map((_, cIdx) => (
+                <td key={cIdx} style={{ textAlign: tableData.alignments[cIdx] || "left" }}>
+                  <AnswerMarkdownInline text={row[cIdx] || ""} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 const answerMarkdownComponents: Components = {
   p: ({ children }) => <p>{withCitations(children)}</p>,
   li: ({ children }) => <li>{withCitations(children)}</li>,
   strong: ({ children }) => <strong>{withCitations(children)}</strong>,
   em: ({ children }) => <em>{withCitations(children)}</em>,
+  code: ({ children }) => <code className="ask-inline-code">{children}</code>,
   // Answers are untrusted model output: render links as plain text.
   a: ({ children }) => <>{withCitations(children)}</>,
+  table: ({ children }) => (
+    <div className="ask-table-wrapper">
+      <table className="ask-markdown-table">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead>{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => <th>{withCitations(children)}</th>,
+  td: ({ children }) => <td>{withCitations(children)}</td>,
 };
 
 function AnswerMarkdown({ text }: { text: string }) {
-  return <ReactMarkdown components={answerMarkdownComponents}>{text}</ReactMarkdown>;
+  const segments = useMemo(() => parseContentWithTables(text), [text]);
+
+  return (
+    <div className="answer-markdown-container">
+      {segments.map((seg, idx) => {
+        if (seg.type === "table") {
+          return <MarkdownTableRenderer key={idx} rawTable={seg.content} />;
+        }
+        return (
+          <ReactMarkdown key={idx} components={answerMarkdownComponents}>
+            {seg.content}
+          </ReactMarkdown>
+        );
+      })}
+    </div>
+  );
 }
 
 function uniqueCitations(citations?: AskResponse["citations"]) {
@@ -603,7 +773,7 @@ export default function Ask() {
         model_id: src.model_id ?? modelChoice[src.provider] ?? null,
         reasoning: reasoningChoice[src.provider] ?? null,
       }));
-      const res = await api.branchConversation(convId, sources, branchModels);
+      const res = await api.branchConversation(convId, sources, branchModels, companyKbEnabled, googleDriveEnabled);
       setTurns((current) =>
         current.map((t) =>
           t.id === turn.id ? { ...t, chosenProvider: provider, picked: {}, response: { ...t.response!, answer: content } } : t

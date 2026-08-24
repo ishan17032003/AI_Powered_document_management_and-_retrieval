@@ -2126,6 +2126,64 @@ mark {
   font-weight: 700;
 }
 
+/* ── Ask AI Markdown Tables ─────────────────────────────────────── */
+.ask-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-soft, rgba(0, 0, 0, 0.02));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ask-markdown-table {
+  width: 100%;
+  min-width: 320px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.ask-markdown-table thead {
+  background: var(--surface, #ffffff);
+  border-bottom: 2px solid var(--line-strong, #e2e8f0);
+}
+
+.ask-markdown-table th {
+  padding: 8px 12px;
+  font-weight: 600;
+  color: var(--ink, #1a202c);
+  font-family: var(--font-sans, inherit);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.ask-markdown-table td {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line, #e2e8f0);
+  color: var(--graphite, #4a5568);
+  vertical-align: top;
+}
+
+.ask-markdown-table tbody tr:nth-child(even) {
+  background: var(--surface, rgba(255, 255, 255, 0.4));
+}
+
+.ask-markdown-table tbody tr:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.ask-inline-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-mute, rgba(0, 0, 0, 0.06));
+  color: var(--primary, #0f766e);
+}
+
 .answer-foot {
   display: flex;
   align-items: center;

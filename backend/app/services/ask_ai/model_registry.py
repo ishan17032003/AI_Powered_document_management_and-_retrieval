@@ -64,13 +64,12 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="Claude",
         color="#d97757",
         versions=(
-            # Claude 5 family (August 2026) — latest lineup
-            ModelVersion("claude-fable-5", "Fable 5", ("text", "code", "html", "report", "vision"), 10.00, 50.00, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-opus-5", "Opus 5", ("text", "code", "html", "report", "vision"), 5.00, 25.00, default=True, reasoning_levels=REASONING_LEVELS),
             ModelVersion("claude-sonnet-5", "Sonnet 5", ("text", "code", "html", "vision"), 2.00, 10.00, reasoning_levels=REASONING_LEVELS),
-            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 1.00, 5.00, reasoning_levels=REASONING_LEVELS),
-            # Legacy (still available but not recommended for new projects)
-            ModelVersion("claude-opus-4-8", "Opus 4.8 (legacy)", ("text", "code", "html", "report", "vision"), 5.00, 25.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-fable-5", "Fable 5", ("text", "code", "html", "report", "vision"), 10.00, 50.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-haiku-4-5-20251001", "Haiku 4.5", ("text", "code", "html"), 0.80, 4.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-sonnet-4-5-20250929", "Sonnet 4.5", ("text", "code", "html", "vision"), 2.00, 10.00, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("claude-opus-4-8", "Opus 4.8", ("text", "code", "html", "report", "vision"), 5.00, 25.00, reasoning_levels=REASONING_LEVELS),
         ),
     ),
     ProviderEntry(
@@ -78,8 +77,10 @@ _STATIC: tuple[ProviderEntry, ...] = (
         display_name="Gemini",
         color="#4285f4",
         versions=(
-            ModelVersion("gemini-2.5-pro", "2.5 Pro", ("text", "code", "html", "report", "vision"), 1.25, 10.00, default=True, reasoning_levels=REASONING_LEVELS),
-            ModelVersion("gemini-2.5-flash", "2.5 Flash", ("text", "code", "html"), 0.30, 2.50, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gemini-2.5-flash", "2.5 Flash", ("text", "code", "html", "report", "vision"), 0.15, 0.60, default=True, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gemini-3.6-flash", "3.6 Flash", ("text", "code", "html"), 0.15, 0.60, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gemini-3.5-flash", "3.5 Flash", ("text", "code", "html"), 0.15, 0.60, reasoning_levels=REASONING_LEVELS),
+            ModelVersion("gemini-3.7-flash", "3.7 Flash", ("text", "code", "html", "report", "vision"), 0.15, 0.60, reasoning_levels=REASONING_LEVELS),
         ),
     ),
 )
@@ -149,3 +150,74 @@ def to_public(entries: list[ProviderEntry]) -> list[dict]:
         }
         for e in entries
     ]
+
+
+async def fetch_live_models(provider: str | None = None) -> dict[str, list[dict]]:
+    """Query live provider APIs to discover available models for configured keys."""
+    import httpx
+    import os
+
+    def _k(name: str, *env: str) -> str:
+        val = getattr(settings, name, None) or ""
+        for e in env:
+            val = val or os.getenv(e) or ""
+        return val.strip()
+
+    results: dict[str, list[dict]] = {}
+    
+    # 1. OpenAI
+    if provider in (None, "openai"):
+        key = _k("openai_api_key", "DOCVAULT_OPENAI_API_KEY", "OPENAI_API_KEY")
+        if key:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {key}"})
+                    if res.status_code == 200:
+                        raw = res.json().get("data", [])
+                        results["openai"] = [{"id": m.get("id"), "created": m.get("created")} for m in raw if "gpt" in m.get("id", "").lower() or "o1" in m.get("id", "").lower() or "o3" in m.get("id", "").lower()]
+            except Exception:
+                pass
+
+    # 2. Claude (Anthropic)
+    if provider in (None, "claude"):
+        key = _k("anthropic_api_key", "DOCVAULT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+        if key:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get("https://api.anthropic.com/v1/models", headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
+                    if res.status_code == 200:
+                        raw = res.json().get("data", [])
+                        results["claude"] = [{"id": m.get("id"), "display_name": m.get("display_name")} for m in raw]
+            except Exception:
+                pass
+
+    # 3. Gemini (Google)
+    if provider in (None, "gemini"):
+        key = _k("gemini_api_key", "DOCVAULT_GEMINI_API_KEY", "GEMINI_API_KEY")
+        if key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=key)
+                gem_models = []
+                for m in genai.list_models():
+                    if "generateContent" in m.supported_generation_methods:
+                        gem_models.append({"id": m.name.replace("models/", ""), "name": m.display_name, "description": m.description})
+                results["gemini"] = gem_models
+            except Exception:
+                pass
+
+    # 4. vLLM (local)
+    if provider in (None, "vllm"):
+        url = _k("vllm_url", "DOCVAULT_VLLM_URL", "VLLM_URL").rstrip("/")
+        if url:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get(f"{url}/models")
+                    if res.status_code == 200:
+                        raw = res.json().get("data", [])
+                        results["vllm"] = [{"id": m.get("id")} for m in raw]
+            except Exception:
+                pass
+
+    return results
+

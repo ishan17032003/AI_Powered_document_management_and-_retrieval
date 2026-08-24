@@ -615,12 +615,19 @@ export const api = {
   branchConversation: (
     conversation_id: string,
     sources: { provider: string; model_id?: string | null; content: string }[],
-    enabled_models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null
+    enabled_models?: { provider: string; model_id: string | null; reasoning?: string | null }[] | null,
+    company_kb_enabled?: boolean,
+    google_drive_enabled?: boolean
   ) =>
     req<{ conversation_id: string; title: string }>(`/search/conversations/${encodeURIComponent(conversation_id)}/branch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sources, enabled_models: enabled_models ?? null }),
+      body: JSON.stringify({
+        sources,
+        enabled_models: enabled_models ?? null,
+        company_kb_enabled: company_kb_enabled ?? null,
+        google_drive_enabled: google_drive_enabled ?? null,
+      }),
     }),
 
   selectAnswer: (conversation_id: string, chosen_answer: string, provider: string, model_id?: string | null, metrics?: AskRunMetrics | null) =>

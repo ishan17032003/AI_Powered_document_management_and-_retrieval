@@ -128,7 +128,7 @@ async def create_conversation(
         doc = MongoConversation(
             **{"_id": conversation_id},
             user_id=user_id,
-            company_kb_enabled=True,  # company KB is always enabled
+            company_kb_enabled=company_kb_enabled,
             google_drive_enabled=google_drive_enabled,
         )
         await db[_CONVERSATIONS].insert_one(doc.model_dump(by_alias=True))
@@ -224,15 +224,16 @@ async def update_source_flags(
     conversation_id: str,
     user_id: int,
     *,
+    company_kb_enabled: bool,
     google_drive_enabled: bool,
 ) -> None:
-    """Update per-turn source flags.  company_kb_enabled is always True."""
+    """Update per-turn source flags."""
     if db is None:
         return
     try:
         await db[_CONVERSATIONS].update_one(
             {"_id": conversation_id, "user_id": user_id},
-            {"$set": {"company_kb_enabled": True, "google_drive_enabled": google_drive_enabled}},
+            {"$set": {"company_kb_enabled": company_kb_enabled, "google_drive_enabled": google_drive_enabled}},
         )
     except Exception as exc:
         _log.warning("update_source_flags failed: %s", exc)
@@ -414,6 +415,8 @@ async def branch_conversation(
     sources: list[dict],
     title: str,
     enabled_models: list[dict] | None = None,
+    company_kb_enabled: bool | None = None,
+    google_drive_enabled: bool | None = None,
 ) -> str | None:
     """Fork a child conversation from ``parent_id``.
 
@@ -437,6 +440,8 @@ async def branch_conversation(
             "created_at": now,
             "last_message_at": now,
             "parent_ids": [parent_id],
+            "company_kb_enabled": company_kb_enabled if company_kb_enabled is not None else parent.get("company_kb_enabled", True),
+            "google_drive_enabled": google_drive_enabled if google_drive_enabled is not None else parent.get("google_drive_enabled", False),
             "branched_from": [
                 {
                     "conversation_id": parent_id,

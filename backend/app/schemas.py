@@ -440,6 +440,8 @@ class BranchRequest(BaseModel):
 
     sources: list[BranchSource] = Field(min_length=1, max_length=4)
     enabled_models: list[ModelSelection] | None = Field(default=None, max_length=8)
+    company_kb_enabled: bool | None = None
+    google_drive_enabled: bool | None = None
 
 
 class BranchOut(BaseModel):
