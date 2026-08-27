@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -109,7 +110,7 @@ class Settings(BaseSettings):
     max_document_pages: int = Field(default=10_000, ge=1, le=1_000_000)
     max_image_pixels: int = Field(default=100_000_000, ge=1, le=2_000_000_000)
     max_extracted_text_chars: int = Field(default=5_000_000, ge=1, le=100_000_000)
-    max_extraction_seconds: int = Field(default=120, ge=1, le=3600)
+    max_extraction_seconds: int = Field(default=600, ge=1, le=3600)
     # OCR runs with the intersection of these requested languages and the
     # language packs installed in the worker image.  The selected and missing
     # packs are persisted as extraction provenance for each document version.
@@ -120,6 +121,32 @@ class Settings(BaseSettings):
         le=1.0,
     )
     ingestion_worker_count: int = Field(default=1, ge=1, le=32)
+
+    # ── Parallel batch PDF extraction ────────────────────────────────────────
+    # PDFs exceeding this page count are split into page-range batches before
+    # being passed to Docling.  Each batch runs in its own subprocess worker so
+    # multiple batches of the same document can be OCR-ed in parallel.
+    # Tunable via DOCVAULT_PDF_BATCH_SIZE in the environment / .env file.
+    pdf_batch_size: int = Field(default=25, ge=5, le=500)
+
+    # Maximum number of subprocess workers in the extraction process pool.
+    # Default: 75 % of logical CPUs rounded down, minimum 2, so at least one
+    # core remains free for the API server, PostgreSQL, and OS scheduling.
+    # Workers are kept alive between jobs (warm Docling/ONNX models).
+    # Tunable via DOCVAULT_EXTRACTION_MAX_WORKERS.
+    extraction_max_workers: int = Field(
+        default_factory=lambda: max(2, int((os.cpu_count() or 2) * 0.75)),
+        ge=1,
+        le=64,
+    )
+
+    # Per-batch retry budget.  When a subprocess crashes or Docling returns an
+    # error, that batch alone is requeued up to this many times with exponential
+    # back-off (2 s, 4 s, 8 s …).  Other already-completed batches are NOT
+    # re-run.  After all retries are exhausted the document moves to FAILED.
+    # Tunable via DOCVAULT_PDF_BATCH_MAX_RETRIES.
+    pdf_batch_max_retries: int = Field(default=3, ge=1, le=10)
+
     enable_embeddings: bool = False
     retrieval_read_mode: RetrievalReadMode = RetrievalReadMode.CURRENT
     lancedb_uri: Path = BASE_DIR / "lancedb"

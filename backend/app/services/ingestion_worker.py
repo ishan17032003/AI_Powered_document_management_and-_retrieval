@@ -23,6 +23,7 @@ from ..repositories import document_repository, job_repository, search_repositor
 from ..storage import object_store
 from ..utils import classification
 from . import (
+    cancellation_registry,
     extraction_service,
     ingestion_pipeline,
     search_service,
@@ -32,6 +33,26 @@ from . import (
 EXTRACTOR_VERSION = extraction_service.EXTRACTION_PIPELINE_VERSION
 CHUNKER_VERSION = "document-v1"
 INDEX_VERSION = "fts5-v1"
+
+
+def _perform_full_rollback(db, document_id: int) -> None:  # type: ignore[type-arg]
+    """Erase every partial index write for *document_id*.
+
+    Called when a document is deleted mid-extraction or when a batch exhausts
+    its retry budget, to ensure no orphan FTS/LanceDB/Qdrant rows remain.
+    """
+    import logging as _logging
+    log = _logging.getLogger(__name__)
+    try:
+        search_repository.remove_document(db, document_id)
+        db.commit()
+    except Exception as exc:
+        log.warning("Full rollback: FTS remove failed for document %s: %s", document_id, exc)
+        db.rollback()
+    try:
+        search_service.remove_vector(document_id)   # LanceDB + Qdrant — idempotent
+    except Exception as exc:
+        log.warning("Full rollback: vector remove failed for document %s: %s", document_id, exc)
 
 
 def mandatory_stages_complete(
@@ -128,6 +149,11 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
     if document is None or version is None:
         _fail(db, job, document, "INGESTION_REFERENCE_MISSING")
         return job
+
+    # Register the document in the cancellation registry so delete_document()
+    # can signal us to abort.  Always unregister in the finally block.
+    doc_id = document.id
+    cancellation_registry.register(doc_id)
     try:
         if job.stage == "EXTRACT":
             with trace_span("worker", "extract", document_id=document.id):
@@ -136,6 +162,7 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
                         Path(handle.name),
                         version.content_type,
                         filename=version.filename,
+                        document_id=document.id,   # enables parallel batch path
                     )
             version.ocr_text = extraction.text
             version.extractor_version = extraction.extractor_version
@@ -384,6 +411,40 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
                 return job
             db.commit()
             db.refresh(job)
+    except extraction_service.ExtractionCancelled:
+        # Document was deleted mid-extraction; fully roll back all partial writes.
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "run_claimed_job: document %s extraction cancelled — rolling back", doc_id
+        )
+        db.rollback()
+        _perform_full_rollback(db, doc_id)
+        fresh = db.get(models.IngestionJob, job.id)
+        if fresh is not None and fresh.state not in {"CANCELLED", "SUCCEEDED", "FAILED"}:
+            ingestion_pipeline.record_stage_result(
+                fresh,
+                ingestion_pipeline.IngestionStage.EXTRACT,
+                ingestion_pipeline.StageResultStatus.CANCELLED,
+                code="DOCUMENT_DELETED",
+            )
+            fresh.state = "CANCELLED"
+            fresh.lock_owner = None
+            fresh.locked_at = None
+            db.commit()
+            job = fresh
+    except extraction_service.ExtractionBatchFailed as exc:
+        # One batch exhausted all retries; fail the document so the operator
+        # can use the existing Retry button to reprocess from scratch.
+        import logging as _logging
+        _logging.getLogger(__name__).error(
+            "run_claimed_job: document %s batch extraction failed: %s", doc_id, exc
+        )
+        db.rollback()
+        _perform_full_rollback(db, doc_id)
+        fresh = db.get(models.IngestionJob, job.id)
+        if fresh is not None:
+            _fail(db, fresh, db.get(models.Document, fresh.document_id) if fresh.document_id else None, "BATCH_EXTRACTION_FAILED")
+            job = fresh
     except Exception as exc:
         import traceback
         traceback.print_exc()
@@ -392,6 +453,8 @@ def run_claimed_job(db: Session, job: models.IngestionJob) -> models.IngestionJo
         if fresh is not None:
             _fail(db, fresh, db.get(models.Document, fresh.document_id) if fresh.document_id else None, "INGESTION_STAGE_FAILED")
             job = fresh
+    finally:
+        cancellation_registry.unregister(doc_id)
     return job
 
 

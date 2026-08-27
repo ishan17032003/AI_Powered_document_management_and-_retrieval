@@ -1171,6 +1171,14 @@ def delete_document(
         document.failure_code = "TOMBSTONED"
         for version in document.versions:
             version.storage_state = "DELETED"
+        # Cancel any in-flight ingestion jobs immediately in DB
+        db.query(models.IngestionJob).filter(
+            models.IngestionJob.document_id == document_id,
+            models.IngestionJob.state.in_(["PENDING", "RUNNING", "CLAIMED"]),
+        ).update(
+            {"state": "CANCELLED", "updated_at": datetime.now(UTC)},
+            synchronize_session=False,
+        )
         outbox_repository.create_outbox_event(
             db,
             event_id=str(uuid4()),
@@ -1194,6 +1202,14 @@ def delete_document(
         db.rollback()
         raise
 
+    # Signal any in-flight extraction worker for this document to abort
+    # immediately and roll back its partial writes.  The registry call is
+    # best-effort: it is idempotent and never raises.
+    from .cancellation_registry import cancel as _cancel_extraction
+    _cancel_extraction(document_id)
+
+    # Safety-net vector cleanup: catches any LanceDB/Qdrant rows that were
+    # written before the worker saw the cancellation flag.
     search_service.remove_vector(document_id)
 
 

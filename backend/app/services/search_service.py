@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from html.parser import HTMLParser
 
 from sqlalchemy.orm import Session
@@ -77,6 +78,7 @@ def _match_ranges(snippet: str, query: str, *, limit: int = 32) -> list[dict[str
 # ── Lazy model singletons ────────────────────────────────────────────────────
 _embed_model = None
 _embed_checked = False
+_embed_lock = threading.Lock()
 
 _reranker = None
 _reranker_checked = False
@@ -93,9 +95,16 @@ def _get_embed_model():
     if not settings.embedding_model:
         return None
     try:
+        import os
+        import torch
         from FlagEmbedding import BGEM3FlagModel
 
-        _embed_model = BGEM3FlagModel(settings.embedding_model, use_fp16=True)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        use_fp16 = device == "cuda"
+        # Use up to 50% of available logical cores (max 8) for fast matrix multiplication while preserving OS headroom
+        if device == "cpu":
+            torch.set_num_threads(max(1, min(8, (os.cpu_count() or 4) // 2)))
+        _embed_model = BGEM3FlagModel(settings.embedding_model, use_fp16=use_fp16, device=device)
     except Exception:
         try:
             from sentence_transformers import SentenceTransformer
@@ -106,36 +115,58 @@ def _get_embed_model():
     return _embed_model
 
 
-def _embed(texts: list[str]) -> tuple[list[list[float]], list[dict] | None]:
-    """Return (dense_vectors, sparse_vectors_or_None) for a list of texts."""
-    model = _get_embed_model()
-    if model is None:
+def _embed(
+    texts: list[str],
+    *,
+    return_sparse: bool = False,
+    document_id: int | None = None,
+) -> tuple[list[list[float]], list[dict] | None]:
+    """Return (dense_vectors, sparse_vectors_or_None) for a list of texts (strictly serialized)."""
+    if not texts:
         return [], None
-    try:
-        # BGE-M3 native API with optimized batch_size and max_length for speed.
-        output = model.encode(
-            texts,
-            batch_size=32,
-            max_length=512,
-            return_dense=True,
-            return_sparse=True,
-            return_colbert_vecs=False,
-        )
-        dense = output["dense_vecs"].tolist()
-        # Convert sparse {token_id: weight} dicts to Qdrant SparseVector format.
-        sparse = []
-        for sv in output.get("lexical_weights", [{}]):
-            indices = [int(k) for k in sv.keys()]
-            values = [float(v) for v in sv.values()]
-            sparse.append({"indices": indices, "values": values})
-        return dense, sparse
-    except Exception:
-        try:
-            # SentenceTransformer fallback — dense only.
-            dense = model.encode(texts, batch_size=32, normalize_embeddings=True).tolist()
-            return dense, None
-        except Exception:
+    from . import cancellation_registry as _c_reg
+    from .extraction_service import ExtractionCancelled
+
+    with _embed_lock:
+        if document_id and _c_reg.is_cancelled(document_id):
+            raise ExtractionCancelled(f"document {document_id} cancelled during embedding")
+        model = _get_embed_model()
+        if model is None:
             return [], None
+        try:
+            # Process in bounded sub-batches to vectorize embedding while allowing cancellation checkpoints
+            sub_batch_size = 16
+            all_dense: list[list[float]] = []
+            all_sparse: list[dict] | None = [] if return_sparse else None
+
+            for i in range(0, len(texts), sub_batch_size):
+                if document_id and _c_reg.is_cancelled(document_id):
+                    raise ExtractionCancelled(f"document {document_id} cancelled during embedding")
+                batch_slice = texts[i : i + sub_batch_size]
+                output = model.encode(
+                    batch_slice,
+                    batch_size=sub_batch_size,
+                    max_length=512,
+                    return_dense=True,
+                    return_sparse=return_sparse,
+                    return_colbert_vecs=False,
+                )
+                all_dense.extend(output["dense_vecs"].tolist())
+                if return_sparse and all_sparse is not None:
+                    for sv in output.get("lexical_weights", [{}]):
+                        indices = [int(k) for k in sv.keys()]
+                        values = [float(v) for v in sv.values()]
+                        all_sparse.append({"indices": indices, "values": values})
+            return all_dense, all_sparse
+        except ExtractionCancelled:
+            raise
+        except Exception:
+            try:
+                # SentenceTransformer fallback — dense only.
+                dense = model.encode(texts, batch_size=4, normalize_embeddings=True).tolist()
+                return dense, None
+            except Exception:
+                return [], None
 
 
 # ── Cross-encoder reranker ────────────────────────────────────────────────────
@@ -195,7 +226,7 @@ def _qdrant_search(query: str, allowed_ids: set[int] | None, limit: int) -> list
     """Perform hybrid dense+sparse search against Qdrant."""
     if search_repository.get_qdrant() is None:
         return []
-    dense_vectors, sparse_vectors = _embed([query])
+    dense_vectors, sparse_vectors = _embed([query], return_sparse=True)
     if not dense_vectors:
         return []
     sparse_vector = sparse_vectors[0] if sparse_vectors else None
@@ -218,7 +249,7 @@ def index_vector(document_id: int, title: str, content: str) -> bool:
         return False
     snippet = (content or "")[:400].strip()
     text_to_embed = f"{title}\n\n{content}"[:2000]
-    dense_vectors, sparse_vectors = _embed([text_to_embed])
+    dense_vectors, sparse_vectors = _embed([text_to_embed], return_sparse=True, document_id=document_id)
     if not dense_vectors:
         return False
     sparse_vector = sparse_vectors[0] if sparse_vectors else None
@@ -433,7 +464,11 @@ def index_lancedb_chunks(
         chunks = chunk_text(document_id, version_id, text_value)
         embedding_metadata = None
         if settings.lancedb_text_vectors_enabled and chunks:
-            dense, _ = _embed([chunk.text for chunk in chunks])
+            dense, _ = _embed(
+                [chunk.text for chunk in chunks],
+                return_sparse=False,
+                document_id=document_id,
+            )
             if dense and len(dense) == len(chunks):
                 embedding_metadata = {
                     "dense_vectors": {
