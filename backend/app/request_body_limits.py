@@ -104,14 +104,19 @@ def _content_length(scope: Scope) -> int | None:
     return int(significant)
 
 
+MAX_MEDIA_UPLOAD_BYTES: Final = 20 * 1024 * 1024 * 1024  # 20 GB for media uploads
+
+
 def _limit_for(scope: Scope, *, max_body_bytes: int, max_upload_bytes: int) -> int:
     """Return the finite cap for every HTTP scope, including unknown paths."""
 
+    path = scope.get("path", "")
     if (
         scope.get("method") == "POST"
-        and scope.get("path") == UPLOAD_PATH
+        and (path == UPLOAD_PATH or path.startswith(f"{UPLOAD_PATH}/"))
     ):
-        return max_upload_bytes + MAX_MULTIPART_OVERHEAD_BYTES
+        effective_upload = max(max_upload_bytes, MAX_MEDIA_UPLOAD_BYTES)
+        return effective_upload + MAX_MULTIPART_OVERHEAD_BYTES
     return max_body_bytes
 
 

@@ -6,12 +6,32 @@ import {
   Check,
   FileArchive,
   FileText,
+  Film,
   FolderInput,
+  Image as ImageIcon,
+  Music,
   UploadCloud,
 } from "lucide-react";
 import { api, ImportResult, IngestionStatus, UploadResult } from "../api";
 import { useAuth } from "../auth";
 import { PageHeader, SectionCard, StatusPill, StatusTone } from "../components/ui";
+
+function getFileIcon(filename: string) {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf("."));
+  if ([".mp4", ".avi", ".mov", ".mkv", ".webm"].includes(ext)) {
+    return <Film size={17} />;
+  }
+  if ([".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"].includes(ext)) {
+    return <Music size={17} />;
+  }
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".bmp"].includes(ext)) {
+    return <ImageIcon size={17} />;
+  }
+  if ([".zip", ".tar", ".gz", ".rar", ".7z"].includes(ext)) {
+    return <FileArchive size={17} />;
+  }
+  return <FileText size={17} />;
+}
 
 interface UploadRow {
   id: string;
@@ -217,7 +237,7 @@ export default function Upload() {
             >
               Choose files
             </button>
-            <small>PDF, images, Office files, text, CSV, Markdown, and more · 50 MB per file</small>
+            <small>PDF, Audio (WAV/MP3/M4A/FLAC), Video (MP4/MOV/AVI), Images, Office, Text, CSV, Markdown, and more</small>
             <input
               ref={inputRef}
               type="file"
@@ -269,7 +289,7 @@ export default function Upload() {
                     >
                       <td data-label="File">
                         <span className="document-link">
-                          <span className="file-symbol"><FileArchive size={17} /></span>
+                          <span className="file-symbol">{getFileIcon(row.name)}</span>
                           <span>{row.name}</span>
                         </span>
                       </td>

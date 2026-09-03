@@ -8,6 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import os
+import tempfile
+from pathlib import Path
+
+# Ensure /data/tmp exists and is used as default temp directory for large file streaming
+os.makedirs("/data/tmp", exist_ok=True)
+tempfile.tempdir = "/data/tmp"
+
 from . import __version__
 from .bootstrap import prepare_runtime_directories
 from .error_responses import (

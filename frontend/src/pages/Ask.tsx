@@ -512,10 +512,10 @@ export default function Ask() {
               mode: "rag",
               model: null,
               needs_clarification: false,
-              scoped_document_id: null,
-              citations: [],
+              citations: (userMsg as any).evidence?.citations ?? [],
+              drive_sources: (userMsg as any).evidence?.drive_sources ?? [],
               candidates: [],
-              images: [],
+              images: (userMsg as any).evidence?.images ?? [],
               conversation_id: id,
             } as any,
           };

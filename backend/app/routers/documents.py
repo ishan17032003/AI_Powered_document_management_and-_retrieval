@@ -64,7 +64,7 @@ def upload_document(
     db: Session = Depends(get_db),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=200),
 ):
-    data = file.file.read(settings.max_upload_bytes + 1)
+    data = file.file.read()
     context = get_request_context(request)
     with bound_request_context(context):
         if idempotency_key:
@@ -101,7 +101,7 @@ def upload_document_version(
     user: models.User = Depends(require("CREATE")),
     db: Session = Depends(get_db),
 ):
-    data = file.file.read(settings.max_upload_bytes + 1)
+    data = file.file.read()
     context = get_request_context(request)
     with bound_request_context(context):
         return document_service.ingest_document_version(

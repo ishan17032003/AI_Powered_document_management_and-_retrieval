@@ -29,7 +29,7 @@ services:
       - no-new-privileges:true
     read_only: false
     tmpfs:
-      - /tmp:noexec,nosuid,size=64m
+      - /tmp:noexec,nosuid,size=4g
     env_file:
       - path: .env          # Copy .env.example → .env and fill in values
         required: false     # App validation fails closed if production values are absent
@@ -41,6 +41,9 @@ services:
       # remains the only public ingress.
       - "127.0.0.1:8000:8000"
     environment:
+      TMPDIR: "/data/tmp"
+      PATH: "/data/bin:/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      PYTHONPATH: "/data/pip_packages:/app"
       # ── Core ──
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-development}"
       DOCVAULT_DEBUG: "${DOCVAULT_DEBUG:-true}"
@@ -49,7 +52,7 @@ services:
       DOCVAULT_STORAGE_DIR: "/data/storage"
       DOCVAULT_OKF_BUNDLE_DIR: "/data/okf_bundle"
       DOCVAULT_ACCESS_TOKEN_MINUTES: "${DOCVAULT_ACCESS_TOKEN_MINUTES:-480}"
-      DOCVAULT_MAX_UPLOAD_MB: "${DOCVAULT_MAX_UPLOAD_MB:-50}"
+      DOCVAULT_MAX_UPLOAD_MB: "${DOCVAULT_MAX_UPLOAD_MB:-10240}"
       # ── Server-folder import (off until approved roots are mounted) ──
       DOCVAULT_FOLDER_IMPORT_ENABLED: "${DOCVAULT_FOLDER_IMPORT_ENABLED:-false}"
       DOCVAULT_FOLDER_IMPORT_ROOTS: '${DOCVAULT_FOLDER_IMPORT_ROOTS:-[]}'
@@ -157,11 +160,14 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:noexec,nosuid,size=64m
+      - /tmp:noexec,nosuid,size=4g
     env_file:
       - path: .env
         required: false
     environment:
+      TMPDIR: "/data/tmp"
+      PATH: "/data/bin:/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      PYTHONPATH: "/data/pip_packages:/app"
       PYTHONUNBUFFERED: "1"
       DOCVAULT_ENVIRONMENT: "${DOCVAULT_ENVIRONMENT:-development}"
       DOCVAULT_DATABASE_URL: "${DOCVAULT_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/docvault}"

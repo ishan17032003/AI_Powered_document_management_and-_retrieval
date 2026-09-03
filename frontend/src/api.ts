@@ -656,6 +656,21 @@ export const api = {
     }),
   audit: () => req<AuditRow[]>("/audit?limit=200"),
   contentUrl: (id: number) => `/api/v1/documents/${id}/content`,
+  async fetchBlob(docId: number): Promise<{ url: string; blob: Blob; contentType: string }> {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    
+    const res = await fetch(`/api/v1/documents/${docId}/content`, { headers });
+    if (!res.ok) {
+      if (res.status === 401) setToken(null);
+      throw new ApiError(res.status, "Failed to load document content");
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const contentType = res.headers.get("content-type") || blob.type || "";
+    return { url, blob, contentType };
+  },
   async downloadDocument(docId: number, filename: string): Promise<void> {
     const headers = new Headers();
     const token = getToken();

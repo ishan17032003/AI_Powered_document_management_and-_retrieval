@@ -28,17 +28,23 @@ class DocumentExtractor:
         lower_name = file_name.lower()
 
         try:
-            # Skip binary archives, images, videos
+            # Skip binary archives
             if (
                 mime_type in ["application/zip", "application/x-zip-compressed", "application/x-tar", "application/gzip"]
                 or any(lower_name.endswith(ext) for ext in [".zip", ".tar", ".gz", ".rar", ".7z", ".iso", ".bin", ".exe"])
             ):
                 return f"[Archive file: {file_name} (Contents not indexed)]"
 
-            if mime_type.startswith("image/") or any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]):
+            if mime_type.startswith("image/") or any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".bmp"]):
                 return f"[Image file: {file_name}]"
 
-            # Plain text / CSV / Markdown / Code / JSON / HTML
+            if mime_type.startswith("audio/") or any(lower_name.endswith(ext) for ext in [".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"]):
+                return f"[Audio file: {file_name}]"
+
+            if mime_type.startswith("video/") or any(lower_name.endswith(ext) for ext in [".mp4", ".avi", ".mov", ".mkv", ".webm"]):
+                return f"[Video file: {file_name}]"
+
+            # Plain text / CSV / Markdown / Code / JSON / HTML / WebVTT
             if (
                 mime_type.startswith("text/")
                 or mime_type in [
@@ -48,8 +54,9 @@ class DocumentExtractor:
                     "application/x-yaml",
                     "text/markdown",
                     "text/csv",
+                    "text/vtt",
                 ]
-                or any(lower_name.endswith(ext) for ext in [".txt", ".md", ".csv", ".json", ".py", ".js", ".html", ".log", ".yaml", ".yml", ".env"])
+                or any(lower_name.endswith(ext) for ext in [".txt", ".md", ".csv", ".json", ".py", ".js", ".html", ".htm", ".xhtml", ".log", ".yaml", ".yml", ".env", ".vtt", ".asciidoc", ".adoc", ".tex"])
             ):
                 text = DocumentExtractor._decode_text(file_bytes)
 

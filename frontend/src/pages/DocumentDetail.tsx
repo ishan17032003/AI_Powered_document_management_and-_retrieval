@@ -4,8 +4,11 @@ import {
   ArrowLeft,
   Download,
   FileText,
+  Film,
   History,
+  Image as ImageIcon,
   Languages,
+  Music,
   ScanText,
   Tag,
   Trash2,
@@ -40,6 +43,7 @@ export default function DocumentDetail() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const [document, setDocument] = useState<DocDetail | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -50,6 +54,23 @@ export default function DocumentDetail() {
       .then(setDocument)
       .catch((err) => setError(err.message));
   }, [id]);
+
+  useEffect(() => {
+    if (!document) return;
+    const filename = document.title.toLowerCase();
+    const extension = filename.slice(filename.lastIndexOf("."));
+    const shouldLoadMedia = [
+      ".mp4", ".avi", ".mov", ".mkv", ".webm",
+      ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac",
+      ".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".bmp",
+    ].includes(extension);
+
+    if (shouldLoadMedia) {
+      api.fetchBlob(document.id)
+        .then((res) => setMediaUrl(res.url))
+        .catch(() => setMediaUrl(null));
+    }
+  }, [document?.id]);
 
   async function remove() {
     if (!document) return;
@@ -195,6 +216,48 @@ export default function DocumentDetail() {
           </div>
         </SectionCard>
       </div>
+
+      {(() => {
+        const ext = (document.title || "").toLowerCase().slice((document.title || "").lastIndexOf("."));
+        const isVideo = [".mp4", ".avi", ".mov", ".mkv", ".webm"].includes(ext);
+        const isAudio = [".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"].includes(ext);
+        const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".bmp"].includes(ext);
+        if (!(isVideo || isAudio || isImage) || !mediaUrl) return null;
+        return (
+          <SectionCard className="media-preview-card">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Media playback & preview</span>
+                <h2>{isVideo ? "Video Player" : isAudio ? "Audio Player" : "Image Preview"}</h2>
+              </div>
+              {isVideo ? <Film size={20} /> : isAudio ? <Music size={20} /> : <ImageIcon size={20} />}
+            </div>
+            <div className="media-player-container" style={{ display: "flex", justifyContent: "center", padding: "1rem 0" }}>
+              {isVideo && (
+                <video
+                  controls
+                  src={mediaUrl}
+                  style={{ maxWidth: "100%", maxHeight: "480px", borderRadius: "8px" }}
+                />
+              )}
+              {isAudio && (
+                <audio
+                  controls
+                  src={mediaUrl}
+                  style={{ width: "100%", maxWidth: "600px" }}
+                />
+              )}
+              {isImage && (
+                <img
+                  src={mediaUrl}
+                  alt={document.title}
+                  style={{ maxWidth: "100%", maxHeight: "500px", objectFit: "contain", borderRadius: "8px" }}
+                />
+              )}
+            </div>
+          </SectionCard>
+        );
+      })()}
 
       <SectionCard className="extracted-text-card">
         <div className="section-heading">

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle, ChevronDown, FilePlus2, FileText, FolderArchive, Loader2, Search, Tag, Trash2 } from "lucide-react";
+import { CheckCircle, ChevronDown, FileArchive, FilePlus2, FileText, Film, FolderArchive, Image as ImageIcon, Loader2, Music, Search, Tag, Trash2 } from "lucide-react";
 import { api, DocClass, DocSummary } from "../api";
 import { useAuth } from "../auth";
 import {
@@ -13,6 +13,23 @@ import {
   StatusPill,
   StatusTone,
 } from "../components/ui";
+
+function getFileIcon(filename: string) {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf("."));
+  if ([".mp4", ".avi", ".mov", ".mkv", ".webm"].includes(ext)) {
+    return <Film size={17} />;
+  }
+  if ([".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"].includes(ext)) {
+    return <Music size={17} />;
+  }
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".bmp"].includes(ext)) {
+    return <ImageIcon size={17} />;
+  }
+  if ([".zip", ".tar", ".gz", ".rar", ".7z"].includes(ext)) {
+    return <FileArchive size={17} />;
+  }
+  return <FileText size={17} />;
+}
 
 function statusTone(value: string): StatusTone {
   const normalized = value.toLowerCase();
@@ -444,7 +461,7 @@ export default function Repository() {
                   >
                     <td data-label="Document">
                       <Link className="document-link" to={`/documents/${document.id}`}>
-                        <span className="file-symbol"><FileText size={17} /></span>
+                        <span className="file-symbol">{getFileIcon(document.title)}</span>
                         <span>{document.title}</span>
                       </Link>
                     </td>

@@ -239,26 +239,23 @@ def _ask_images(
     if not scope:
         return []
     try:
-        # Only an explicitly visual question ranks figures against the query
-        # text. For anything else ("summarize X") the question's words say
-        # nothing about which figure matters and only reward incidental word
-        # overlap in OCR text, so the cited documents' own figures in page
-        # order are the honest choice.
-        if _has_visual_intent(question):
-            visual = visual_search_service.search(
-                db,
-                user,
-                query=question,
-                mode="text_to_image",
-                limit=_ASK_IMAGE_LIMIT,
-                allowed_ids=scope,
-            )
-            if visual.hits:
-                return visual.hits
+        # 1. First attempt SigLIP 2 semantic visual search across both image and page/frame lanes
+        visual = visual_search_service.search(
+            db,
+            user,
+            query=question,
+            mode="hybrid",
+            limit=_ASK_IMAGE_LIMIT,
+            allowed_ids=scope,
+        )
+        if visual.hits:
+            return visual.hits
+
+        # 2. Fall back to citing the document's own figures and representative keyframes
         candidates = visual_search_repository.list_candidates(
             db,
             document_ids=frozenset(scope),
-            asset_types=frozenset({"IMAGE", "REGION"}),
+            asset_types=frozenset({"IMAGE", "REGION", "PAGE", "FRAME"}),
             limit=200,
         )
     except Exception:
@@ -272,12 +269,12 @@ def _ask_images(
             version_id=candidate.version_id,
             title=candidate.title,
             asset_type=candidate.asset_type,
-            result_type="image",
+            result_type="page" if candidate.asset_type == "PAGE" else "image",
             page_number=candidate.page_number,
             content_type=candidate.content_type,
             snippet=(candidate.extraction_text or "")[:160],
             score=0.0,
-            matched_lanes=["image"],
+            matched_lanes=["visual"],
         )
         for candidate in candidates[:_ASK_IMAGE_LIMIT]
     ]
@@ -945,6 +942,9 @@ async def ask_stream(
         "routes": [{"kind": retrieval_route.split("_")[0].upper(), "label": f"{len(citations)} passages"}],
         "grounding": (kb_result.answer[:400] if kb_result and kb_result.mode != "notfound" else ""),
         "drive_files": [f.get("name") for f in (drive_files or [])][:4],
+        "citations": citations,
+        "images": images_payload,
+        "drive_sources": drive_sources,
     }
     if user_msg_id and mongo_db is not None:
         try:

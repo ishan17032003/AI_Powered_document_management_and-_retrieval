@@ -292,12 +292,15 @@ def writer_store() -> LanceDbRetrievalStore:
     """Create a mutation-capable adapter only in the designated writer process."""
     if not settings.lancedb_writer_enabled:
         raise RetrievalStoreError("LanceDB writer role is disabled")
-    return LanceDbRetrievalStore(
+    store = LanceDbRetrievalStore(
         settings.lancedb_uri,
         table_name=settings.lancedb_table_name,
         writer=True,
         lock_timeout_seconds=settings.lancedb_lock_timeout_seconds,
     )
+    if store._resolve_table() is None:
+        return provision()
+    return store
 
 
 def provision() -> LanceDbRetrievalStore:

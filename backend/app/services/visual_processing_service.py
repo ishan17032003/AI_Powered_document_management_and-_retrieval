@@ -9,8 +9,14 @@ without changing asset lineage or the API contract.
 from __future__ import annotations
 
 import base64
+import os
+import shutil
+import subprocess
+import tempfile
+import uuid
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -295,6 +301,102 @@ def _process_markdown(
     return assets, extractions
 
 
+def _process_video(
+    db: Session,
+    *,
+    document: models.Document,
+    version: models.DocVersion,
+    data: bytes,
+) -> tuple[int, int]:
+    """Extract representative video frame keyframes and index them as visual assets for SigLIP 2."""
+    ffmpeg_bin = shutil.which("ffmpeg") or "/data/bin/ffmpeg" or "/opt/venv/bin/ffmpeg"
+    if not Path(ffmpeg_bin).exists() and not shutil.which("ffmpeg"):
+        return 0, 0
+
+    temp_dir = Path(tempfile.gettempdir()) / f"video_frames_{version.id}_{uuid.uuid4().hex[:8]}"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    video_tmp = temp_dir / "input_video.mp4"
+    try:
+        video_tmp.write_bytes(data)
+
+        # Extract representative keyframes (1 frame every 10 seconds, up to 16 frames)
+        max_frames = min(settings.visual_max_assets_per_version, 16)
+        out_pattern = str(temp_dir / "frame_%04d.png")
+        cmd = [
+            str(ffmpeg_bin),
+            "-y",
+            "-i", str(video_tmp),
+            "-vf", "fps=1/10,scale=min(1280\\,iw):-2",
+            "-vframes", str(max_frames),
+            "-q:v", "2",
+            out_pattern,
+        ]
+        subprocess.run(cmd, capture_output=True, check=False, timeout=60)
+
+        frame_files = sorted(temp_dir.glob("frame_*.png"))
+        if not frame_files:
+            # Fallback: extract at least the first frame thumbnail
+            cmd_first = [
+                str(ffmpeg_bin),
+                "-y",
+                "-ss", "00:00:01",
+                "-i", str(video_tmp),
+                "-vframes", "1",
+                "-q:v", "2",
+                str(temp_dir / "frame_0001.png"),
+            ]
+            subprocess.run(cmd_first, capture_output=True, check=False, timeout=30)
+            frame_files = sorted(temp_dir.glob("frame_*.png"))
+
+        assets = 0
+        extractions = 0
+        transcript_text = version.ocr_text or document.title or ""
+
+        for idx, frame_path in enumerate(frame_files, start=1):
+            if assets >= settings.visual_max_assets_per_version:
+                break
+            try:
+                frame_bytes = frame_path.read_bytes()
+                if not frame_bytes or len(frame_bytes) > settings.max_upload_bytes:
+                    continue
+                normalized = visual_assets.normalize_visual_derivative_isolated(
+                    frame_bytes,
+                    "image/png",
+                    output_format="PNG",
+                    max_output_bytes=settings.max_upload_bytes,
+                )
+                file_key = _persist_derivative(normalized)
+                asset = visual_assets.register_asset(
+                    db,
+                    document_id=document.id,
+                    version_id=version.id,
+                    asset_type="PAGE",
+                    file_key=file_key,
+                    content_type="image/png",
+                    payload=normalized,
+                    page_number=idx,
+                )
+                assets += 1
+                extractions += int(
+                    _register_extraction(
+                        db,
+                        asset=asset,
+                        version=version,
+                        document=document,
+                        text=f"Video Frame {idx}: {document.title}\n{transcript_text[:500]}",
+                        page_number=idx,
+                    )
+                )
+            except SQLAlchemyError:
+                raise
+            except Exception:
+                continue
+
+        return assets, extractions
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _process_pdf(
     db: Session,
     *,
@@ -505,10 +607,15 @@ def process_version_visuals(
     is_markdown = content_type in {"text/markdown", "text/x-markdown"} or (
         version.filename or ""
     ).lower().endswith(".md")
+    is_video = (
+        content_type.startswith("video/")
+        or Path(version.filename or "").suffix.lower() in {".mp4", ".mov", ".avi", ".webm", ".mkv"}
+    )
     if not (
         content_type.startswith("image/")
         or content_type == "application/pdf"
         or is_markdown
+        or is_video
     ):
         return VisualProcessingResult("disabled", mode="unsupported_source")
 
@@ -555,6 +662,13 @@ def process_version_visuals(
             )
         elif is_markdown:
             assets, extractions = _process_markdown(
+                db,
+                document=document,
+                version=version,
+                data=data,
+            )
+        elif is_video:
+            assets, extractions = _process_video(
                 db,
                 document=document,
                 version=version,

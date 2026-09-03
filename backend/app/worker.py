@@ -21,9 +21,14 @@ import concurrent.futures
 import logging
 import os
 import signal
+import tempfile
 import threading
 import time
+from pathlib import Path
 from uuid import uuid4
+
+os.makedirs("/data/tmp", exist_ok=True)
+tempfile.tempdir = "/data/tmp"
 
 from .bootstrap import prepare_runtime_directories
 from .database import SessionLocal

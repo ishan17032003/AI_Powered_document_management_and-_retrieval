@@ -32,8 +32,38 @@ artifacts/baseline/*/backup/
 artifacts/baseline/*/restore/
 artifacts/baseline/*/isolation/
 
-# Local logs
+# Local logs and debug dumps
 *.log
+
+# Temporary and non-essential text/log files
+*.txt
+!**/requirements.txt
+!backend/tests/fixtures/**
+!artifacts/baseline/**
+
+# Documents, Spreadsheets, Audio & Video files
+*.pdf
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.ods
+*.csv
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.ogg
+*.flac
+*.wma
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wmv
+*.flv
+*.m4v
 
 # Ignore Markdown documentation except the root README
 *.md
@@ -41,3 +71,5 @@ artifacts/baseline/*/isolation/
 secrets/
 hf_cache/
 lancedb/
+lancedb_data/
+data/

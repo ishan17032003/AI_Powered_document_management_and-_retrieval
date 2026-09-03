@@ -66,7 +66,7 @@ def mandatory_stages_complete(
     # persistence.
     if job is None:
         return (
-            document.status == "PROCESSING"
+            document.status in {"PROCESSING", "READY", "REVIEW"}
             and document.ocr_status not in {"pending", "error", "unavailable", "skipped"}
             and bool(version.ocr_text or document.page_count == 0)
             and version.storage_state == "AVAILABLE"
@@ -74,7 +74,7 @@ def mandatory_stages_complete(
         )
     decision = ingestion_pipeline.evaluate_readiness(job)
     return (
-        document.status == "PROCESSING"
+        document.status in {"PROCESSING", "READY", "REVIEW"}
         and document.ocr_status not in {"pending", "error", "unavailable", "skipped"}
         and bool(version.ocr_text or document.page_count == 0)
         and version.storage_state == "AVAILABLE"
@@ -97,6 +97,8 @@ def _extraction_requires_review(
         return True, "EXTRACTION_EMPTY"
     if extraction.missing_ocr_languages:
         return True, "OCR_LANGUAGE_PACK_MISSING"
+    if extraction.extractor_name in {"media-asr", "webvtt-parser"} and extraction.status in {"native", "ocr"}:
+        return False, None
     if (
         extraction.quality_score is None
         or extraction.quality_score < settings.extraction_review_quality_threshold

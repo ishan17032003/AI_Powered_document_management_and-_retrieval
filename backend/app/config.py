@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     # startup without ever being copied into an error response or log.
     trusted_proxy_cidrs: list[str] = Field(default_factory=list)
 
-    max_upload_mb: int = Field(default=50, ge=1, le=2048)
+    max_upload_mb: int = Field(default=10240, ge=1, le=102400)
     max_archive_entries: int = Field(default=10_000, ge=1, le=1_000_000)
     max_archive_uncompressed_mb: int = Field(default=500, ge=1, le=10_000)
     max_archive_compression_ratio: int = Field(default=1_000, ge=1, le=100_000)

@@ -546,10 +546,16 @@ def ingest_document(
 ) -> schemas.UploadResult:
     # Both HTTP uploads and approved folder imports enter the same bounded
     # quarantine before validation, storage promotion, or extraction.
+    ext = Path(filename).suffix.lower()
+    stage_limit = (
+        max(settings.max_upload_bytes, 20 * 1024 * 1024 * 1024)
+        if ext in upload_validation.MEDIA_EXTENSIONS
+        else settings.max_upload_bytes
+    )
     staged = quarantine.stage_stream(
         BytesIO(data),
         directory=settings.storage_dir / ".upload-quarantine",
-        max_bytes=settings.max_upload_bytes,
+        max_bytes=stage_limit,
     )
     try:
         data = staged.path.read_bytes()
@@ -740,10 +746,16 @@ def ingest_document_version(
 ) -> schemas.UploadResult:
     """Append an authorized document version through the durable ingest path."""
     document = _require_authorized_document(db, user, document_id, permission="CREATE")
+    ext = Path(filename).suffix.lower()
+    stage_limit = (
+        max(settings.max_upload_bytes, 20 * 1024 * 1024 * 1024)
+        if ext in upload_validation.MEDIA_EXTENSIONS
+        else settings.max_upload_bytes
+    )
     staged = quarantine.stage_stream(
         BytesIO(data),
         directory=settings.storage_dir / ".upload-quarantine",
-        max_bytes=settings.max_upload_bytes,
+        max_bytes=stage_limit,
     )
     try:
         payload = staged.path.read_bytes()
