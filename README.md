@@ -1,4 +1,4 @@
-# XENIUS DocVault™ — Local Build
+#  DocVault™ — Local Build
 
 AI-based Digital Document Management System (DDMS) with OCR, full-text search,
 deduplication, Role-Based Access Control and an immutable audit trail.
